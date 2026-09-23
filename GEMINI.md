@@ -133,22 +133,13 @@
 ```text
 C:\Users\grudi\MPEI\BD\
 ├── Источники/                   # Эталонные методички, запись Полотнова и файлы данных
-│   ├── файлы данных/            # VUZ.XLS, gr_konk.XLS, Gr_prog.xlsx
+│   ├── файлы данных/            # VUZ.XLS, gr_konk.XLS, Gr_prog.xlsx (исправлен)
 │   └── полотновЛР1.ogg          # Аудиозапись требований Полотнова М.М.
 ├── databases/                   # База данных SQLite
-│   └── grants.db                # Очищенная рабочая реляционная база
+│   └── grants.db                # Готовая рабочая база данных
 ├── src/                         # Исходный код приложения (PyQt6)
-│   ├── database.py              # Подключение к SQLite, PRAGMA foreign_keys, миграции
-│   ├── models.py                # SQL-запросы, агрегации, QSqlTableModel / QSqlQueryModel
-│   ├── reports.py               # Логика расчета финансирования и выпуска ведомостей
-│   ├── ui/                      # Формы Qt Designer (.ui) и сгенерированные файлы (_ui.py)
-│   │   ├── main_window.ui
-│   │   └── main_window_ui.py
-│   └── main.py                  # Точка входа GUI-приложения
-├── scripts/                     # Вспомогательные утилиты разработки
-│   ├── etl_import_excel.py      # Скрипт очистки и миграции XLS -> grants.db
-│   ├── compile_ui.bat           # Скрипт компиляции .ui в .py через pyuic6
-│   └── build_exe.bat            # Скрипт сборки автономного дистрибутива через PyInstaller
+│   ├── database.py              # Подключение к SQLite
+│   └── main.py                  # Главное окно (интерфейс-пустышка)
 ├── docs/                        # Отчеты по ЛР 1-6 по ГОСТ
 └── GEMINI.md                    # Этот файл правил и архитектуры
 ```
