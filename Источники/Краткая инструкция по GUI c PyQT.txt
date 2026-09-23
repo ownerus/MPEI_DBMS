@@ -1,0 +1,72 @@
+1)Используем версию питона 3.9 (на 3.10 библиотеки еще некорректно работают).
+  Используем библиотеку QT6 для отрисовки форм с редактором https://build-system.fman.io/qt-designer-download. 
+2)Данные приведены в формате  xls,  он нас не очень устраивают. Переводим из xls в csv (обращаем внимание на даты!).
+ Для первоначального знакомства с БД удобно использовать https://sqlitebrowser.org/ - Устанавливаем sqlitebrowser, знакомимся с данными.
+3) В качестве среды разработки рекомендуется использовать PyCharm.
+Создаем новый проект. 
+Нужно установить PуQT6:
+от имени администратора в командной строке из папки с проектом:
+call venv\Scripts\activate.bat
+python -m pip install pyqt6
+
+4) в qt designer создаем наброски формы и запускаем, используя подсказки на сайте.
+5) переводим *.ui в *.py скриптом. Это нужно, чтобы понимать какой код на Питоне генерирует форму.
+venv\Scripts\pyuic6.exe -x mm.py -o mm.ui
+
+6) проверям работу формы.
+7) создаем связь с БД. Импортируем:
+
+from PyQt6.QtSql import *
+
+Полный код модуля:
+import sys
+from PyQt6 import uic
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtSql import *
+from PyQt6.QtCore import Qt
+
+
+Form, Window = uic.loadUiType("mm.ui")
+
+db_file = 'F_usd3.db'
+
+
+def test_click():
+    print("test ok")
+
+
+def connect_db(db_file):
+    db = QSqlDatabase.addDatabase("QSQLITE")
+    db.setDatabaseName(db_file)
+    if not db.open():
+        print("Cannot establish a database connection to {}!".format(db_file))
+        return False
+    return db
+
+
+app = QApplication([])
+window = Window()
+form = Form()
+form.setupUi(window)
+
+if not connect_db(db_file):
+    sys.exit(-1)
+else:
+    print("connection ok")
+
+
+form.btnTest.clicked.connect(test_click)
+
+model = QSqlTableModel()
+model.setTable('F_usd')
+model.select()
+
+form.tableView.setSortingEnabled(True)
+
+form.tableView.setModel(model)
+
+window.show()
+app.exec()
+
+
+
