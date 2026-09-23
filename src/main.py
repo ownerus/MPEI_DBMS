@@ -18,7 +18,15 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.database import connect_db
+# Добавляем корень проекта и папку src в sys.path для любого способа запуска
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+try:
+    from src.database import connect_db
+except ModuleNotFoundError:
+    from database import connect_db
 
 
 class MainWindow(QMainWindow):
