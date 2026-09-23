@@ -30,7 +30,7 @@ except ModuleNotFoundError:
 
 
 class MainWindow(QMainWindow):
-    """Главное окно приложения-пустышки по Варианту 7."""
+    """Главное окно приложения по Варианту 7."""
 
     def __init__(self):
         super().__init__()
@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
         act_vuz = menu_data.addAction("Справочник вузов")
         act_vuz.triggered.connect(lambda: self.combo_view.setCurrentIndex(2))
 
-        # Меню "Анализ" (заглушка к ЛР 4)
+        # Меню "Анализ"
         menu_analysis = menubar.addMenu("Анализ")
         act_an_vuz = menu_analysis.addAction("Распределение НИР по вузам")
         act_an_vuz.triggered.connect(lambda: self.combo_view.setCurrentIndex(3))
@@ -72,7 +72,7 @@ class MainWindow(QMainWindow):
         act_an_reg = menu_analysis.addAction("Распределение НИР по регионам РФ")
         act_an_reg.triggered.connect(lambda: self.combo_view.setCurrentIndex(3))
 
-        # Меню "Финансирование" (заглушка к ЛР 5)
+        # Меню "Финансирование"
         menu_finance = menubar.addMenu("Финансирование")
         act_fin_order = menu_finance.addAction("Выпуск распоряжения о финансировании")
         act_fin_order.triggered.connect(lambda: self.combo_view.setCurrentIndex(4))
@@ -84,11 +84,6 @@ class MainWindow(QMainWindow):
         menu_help = menubar.addMenu("Справка")
         act_about = menu_help.addAction("О программе")
         act_about.triggered.connect(self._show_about)
-
-        # Меню "Выход"
-        menu_exit = menubar.addMenu("Выход")
-        act_exit = menu_exit.addAction("Закрыть приложение")
-        act_exit.triggered.connect(self.close)
 
     def _init_ui(self):
         """Построение элементов графического интерфейса."""
@@ -103,11 +98,11 @@ class MainWindow(QMainWindow):
 
         self.combo_view = QComboBox()
         self.combo_view.addItems([
-            "1. Данные: Проекты НИР по грантам",
-            "1. Данные: Конкурсы грантов",
-            "1. Данные: Справочник вузов РФ",
-            "2. Анализ данных (Заглушка ЛР 4)",
-            "3. Финансирование (Заглушка ЛР 5)",
+            "Проекты НИР по грантам",
+            "Конкурсы грантов",
+            "Справочник вузов",
+            "Анализ данных",
+            "Финансирование",
         ])
         self.combo_view.currentIndexChanged.connect(self._on_section_changed)
 
@@ -115,7 +110,7 @@ class MainWindow(QMainWindow):
         top_layout.addWidget(self.combo_view, stretch=1)
         main_layout.addLayout(top_layout)
 
-        # 2. Центральная область (стек: таблицы данных или заглушки отчетов)
+        # 2. Центральная область (стек: таблицы данных или отчеты)
         self.stack = QStackedWidget()
 
         # Страница 0: Просмотр таблиц
@@ -128,7 +123,7 @@ class MainWindow(QMainWindow):
         self.table_view.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
         table_layout.addWidget(self.table_view)
 
-        # Кнопки CRUD (заглушки)
+        # Кнопки CRUD
         buttons_layout = QHBoxLayout()
         btn_add = QPushButton("Добавить")
         btn_edit = QPushButton("Изменить")
@@ -152,26 +147,26 @@ class MainWindow(QMainWindow):
         table_layout.addLayout(buttons_layout)
         self.stack.addWidget(table_page)
 
-        # Страница 1: Заглушка раздела Анализ
+        # Страница 1: Раздел Анализ
         self.lbl_analysis_stub = QLabel(
-            "Раздел «2. Анализ данных»\n\n"
-            "Здесь будут реализованы сводные отчетные формы по ТЗ Варианта 7:\n"
+            "Раздел «Анализ данных»\n\n"
+            "Сводные отчетные формы:\n"
             "• Распределение НИР по вузам\n"
             "• Распределение НИР по конкурсам грантов\n"
             "• Распределение НИР по субъектам РФ\n\n"
-            "(Будет реализовано в ЛР №4)"
+            "Функция пока не реализована."
         )
         self.lbl_analysis_stub.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_analysis_stub.setStyleSheet("font-size: 14px; color: #555; background: #f9f9f9; border: 1px dashed #ccc;")
         self.stack.addWidget(self.lbl_analysis_stub)
 
-        # Страница 2: Заглушка раздела Финансирование
+        # Страница 2: Раздел Финансирование
         self.lbl_finance_stub = QLabel(
-            "Раздел «3. Финансирование»\n\n"
-            "Здесь будут реализованы специальные функции Варианта 7:\n"
+            "Раздел «Финансирование»\n\n"
+            "Функции раздела:\n"
             "• Выпуск распоряжения по финансированию НИР\n"
             "• Формирование сводной ведомости выплат по вузам\n\n"
-            "(Будет реализовано в ЛР №5)"
+            "Функция пока не реализована."
         )
         self.lbl_finance_stub.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_finance_stub.setStyleSheet("font-size: 14px; color: #555; background: #f9f9f9; border: 1px dashed #ccc;")
@@ -269,12 +264,11 @@ class MainWindow(QMainWindow):
         self.lbl_status.setText(f"Всего записей: {self.current_model.rowCount()}")
 
     def _show_stub(self, action_name: str):
-        """Информационное сообщение-заглушка."""
+        """Информационное сообщение для еще не реализованных функций."""
         QMessageBox.information(
             self,
-            "Макет интерфейса",
-            f"Функция «{action_name}» является элементом интерфейса-пустышки "
-            "и будет реализована на этапе выполнения ЛР 2–3."
+            "Информация",
+            f"Функция «{action_name}» пока не реализована."
         )
 
     def _show_about(self):
