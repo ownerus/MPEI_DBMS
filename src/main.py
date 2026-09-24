@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtSql import QSqlQueryModel, QSqlTableModel
+from PyQt6.QtSql import QSqlTableModel
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -191,39 +191,30 @@ class MainWindow(QMainWindow):
             self.stack.setCurrentIndex(2)
 
     def show_table(self, table_name: str):
-        """Показать таблицу; НИР отсортировать по составному ключу."""
-        if table_name == "gr_proj":
-            self.current_model = QSqlQueryModel(self)
-            self.current_model.setQuery("""
-                SELECT codkon, codproj, codvuz, vuz_short_name, grnti_code,
-                       plan_fin, fact_fin, fin_q1, fin_q2, fin_q3, fin_q4,
-                       leader_fio, leader_post, leader_rank, leader_degree, proj_name
-                FROM gr_proj ORDER BY codkon, codproj
-            """)
-        else:
-            self.current_model = QSqlTableModel(self)
-            self.current_model.setTable(table_name)
-            self.current_model.select()
+        """Отображение таблицы БД через стандартный QSqlTableModel."""
+        self.current_model = QSqlTableModel(self)
+        self.current_model.setTable(table_name)
+        self.current_model.select()
 
         # Настраиваем читаемые русские заголовки
         if table_name == "gr_proj":
             headers = {
-                0: "Код конкурса",
                 1: "Код НИР",
-                2: "Код вуза",
-                3: "Вуз",
-                4: "ГРНТИ",
-                5: "План (руб.)",
-                6: "Факт (руб.)",
-                7: "Квартал 1",
-                8: "Квартал 2",
-                9: "Квартал 3",
-                10: "Квартал 4",
-                11: "Руководитель",
-                12: "Должность",
-                13: "Звание",
-                14: "Степень",
-                15: "Тема НИР",
+                2: "Конкурс",
+                3: "Код вуза",
+                4: "Вуз",
+                5: "ГРНТИ",
+                6: "План (руб.)",
+                7: "Факт (руб.)",
+                8: "Квартал 1",
+                9: "Квартал 2",
+                10: "Квартал 3",
+                11: "Квартал 4",
+                12: "Руководитель",
+                13: "Должность",
+                14: "Звание",
+                15: "Степень",
+                16: "Тема НИР",
             }
             for col, text in headers.items():
                 self.current_model.setHeaderData(col, Qt.Orientation.Horizontal, text)
@@ -261,7 +252,10 @@ class MainWindow(QMainWindow):
                 self.current_model.setHeaderData(col, Qt.Orientation.Horizontal, text)
 
         self.table_view.setModel(self.current_model)
-        self.table_view.setSortingEnabled(table_name != "gr_proj")
+
+        # Скрываем суррогатный id в таблице проектов
+        if table_name == "gr_proj":
+            self.table_view.hideColumn(0)
 
         # Подгружаем все строки для корректного счетчика записей
         while self.current_model.canFetchMore():
