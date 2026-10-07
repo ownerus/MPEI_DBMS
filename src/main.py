@@ -558,11 +558,10 @@ class MainWindow(QMainWindow):
             if self.current_filter_where:
                 self.btn_clear_filter.setVisible(True)
                 self.btn_clear_filter.setEnabled(True)
-                self._update_status(f"Фильтр: {self.current_filter_summary}")
             else:
                 self.btn_clear_filter.setVisible(False)
                 self.btn_clear_filter.setEnabled(False)
-                self._update_status("Фильтр снят")
+            self._update_status()
 
     def _on_clear_filter(self):
         """Сброс активного фильтра."""
@@ -576,7 +575,7 @@ class MainWindow(QMainWindow):
 
         self.btn_clear_filter.setVisible(False)
         self.btn_clear_filter.setEnabled(False)
-        self._update_status("Фильтр снят")
+        self._update_status()
 
     def _show_about(self):
         """Сведения о программе."""
