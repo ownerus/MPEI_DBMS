@@ -448,28 +448,48 @@ class MainWindow(QMainWindow):
             d = dlg.result_data
             old_plan = int(record_data.get("plan_fin") or 0)
             new_plan = int(d["plan_fin"] or 0)
-            plan_diff = new_plan - old_plan
+            old_codkon = int(record_data.get("codkon"))
+            new_codkon = int(d["codkon"])
 
             conn = sqlite3.connect(DB_PATH)
             cur = conn.cursor()
             cur.execute("""
                 UPDATE gr_proj
-                SET codvuz = ?, vuz_short_name = ?, grnti_code = ?, plan_fin = ?,
+                SET codkon = ?, codproj = ?, codvuz = ?, vuz_short_name = ?, grnti_code = ?, plan_fin = ?,
                     leader_fio = ?, leader_post = ?, leader_rank = ?, leader_degree = ?,
                     proj_name = ?
                 WHERE id = ?
             """, (
-                d["codvuz"], d["vuz_short_name"], d["grnti_code"], d["plan_fin"],
+                d["codkon"], d["codproj"], d["codvuz"], d["vuz_short_name"], d["grnti_code"], d["plan_fin"],
                 d["leader_fio"], d["leader_post"], d["leader_rank"], d["leader_degree"],
                 d["proj_name"], record_data["id"]
             ))
 
-            if plan_diff != 0:
+            # Синхронизация сумм и счетчиков в таблице конкурсов
+            if old_codkon != new_codkon:
+                # 1. Уменьшаем счетчик и сумму в старом конкурсе
                 cur.execute("""
                     UPDATE gr_konk
-                    SET plan_fin = plan_fin + ?
+                    SET projects_count = projects_count - 1,
+                        plan_fin = plan_fin - ?
                     WHERE codkon = ?
-                """, (plan_diff, d["codkon"]))
+                """, (old_plan, old_codkon))
+                # 2. Увеличиваем счетчик и сумму в новом конкурсе
+                cur.execute("""
+                    UPDATE gr_konk
+                    SET projects_count = projects_count + 1,
+                        plan_fin = plan_fin + ?
+                    WHERE codkon = ?
+                """, (new_plan, new_codkon))
+            else:
+                # Конкурс не менялся, только сумма
+                plan_diff = new_plan - old_plan
+                if plan_diff != 0:
+                    cur.execute("""
+                        UPDATE gr_konk
+                        SET plan_fin = plan_fin + ?
+                        WHERE codkon = ?
+                    """, (plan_diff, new_codkon))
 
             conn.commit()
             conn.close()

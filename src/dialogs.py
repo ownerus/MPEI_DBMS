@@ -187,14 +187,12 @@ class ProjectDialog(QDialog):
 
     def _on_contest_changed(self, index: int):
         """При выборе конкурса предлагаем следующий порядковый номер (MAX + 1)."""
-        if self.mode != "add":
-            return
-
         codkon = self.combo_konk.currentData()
         if not codkon:
             self.suggested_codproj = None
-            self.txt_codproj.clear()
-            self.txt_codproj.setPlaceholderText("")
+            if self.mode == "add":
+                self.txt_codproj.clear()
+                self.txt_codproj.setPlaceholderText("")
             return
 
         conn = sqlite3.connect(self.db_path)
@@ -204,8 +202,9 @@ class ProjectDialog(QDialog):
         conn.close()
 
         self.suggested_codproj = max_cod + 1
-        self.txt_codproj.clear()
         self.txt_codproj.setPlaceholderText(str(self.suggested_codproj))
+        if self.mode == "add":
+            self.txt_codproj.clear()
 
     def _fill_existing_data(self):
         """Предзаполнение полей при редактировании записи."""
@@ -217,11 +216,9 @@ class ProjectDialog(QDialog):
             if self.combo_konk.itemData(i) == codkon:
                 self.combo_konk.setCurrentIndex(i)
                 break
-        self.combo_konk.setEnabled(False)  # Код конкурса в существующем проекте не меняем
 
         # Код НИР
         self.txt_codproj.setText(str(data.get("codproj", "")))
-        self.txt_codproj.setEnabled(False)
 
         # Вуз
         codvuz = data.get("codvuz")
@@ -265,23 +262,26 @@ class ProjectDialog(QDialog):
                 return
             codproj = int(codproj_text)
 
-        # Проверка уникальности составного ключа (codkon, codproj) при добавлении
+        # Проверка уникальности составного ключа (codkon, codproj)
+        conn = sqlite3.connect(self.db_path)
+        cur = conn.cursor()
         if self.mode == "add":
-            conn = sqlite3.connect(self.db_path)
-            cur = conn.cursor()
             cur.execute("SELECT COUNT(*) FROM gr_proj WHERE codkon = ? AND codproj = ?", (codkon, codproj))
-            exists = cur.fetchone()[0] > 0
-            conn.close()
+        else:
+            rec_id = self.record_data.get("id")
+            cur.execute("SELECT COUNT(*) FROM gr_proj WHERE codkon = ? AND codproj = ? AND id != ?", (codkon, codproj, rec_id))
+        exists = cur.fetchone()[0] > 0
+        conn.close()
 
-            if exists:
-                QMessageBox.warning(
-                    self,
-                    "Дубликат ключа",
-                    f"Проект с кодом {codproj} в конкурсе №{codkon} уже существует!\n"
-                    "Укажите другой номер проекта."
-                )
-                self.txt_codproj.setFocus()
-                return
+        if exists:
+            QMessageBox.warning(
+                self,
+                "Дубликат ключа",
+                f"Проект с кодом {codproj} в конкурсе №{codkon} уже существует!\n"
+                "Укажите другой номер проекта или выберите другой конкурс."
+            )
+            self.txt_codproj.setFocus()
+            return
 
         vuz_info = self.combo_vuz.currentData()
         if not vuz_info or not vuz_info[0]:
@@ -303,11 +303,11 @@ class ProjectDialog(QDialog):
             return
 
         grnti = self.txt_grnti.text().strip()
-        if not re.fullmatch(r"^\d{2}\.\d{2}\.\d{2}(?:,\s*\d{2}\.\d{2}\.\d{2})?$", grnti):
+        if not re.fullmatch(r"^\d{2}\.\d{2}(?:\.\d{2})?(?:,\s*\d{2}\.\d{2}(?:\.\d{2})?)?$", grnti):
             QMessageBox.warning(
                 self,
                 "Ошибка формата ГРНТИ",
-                "Код ГРНТИ должен иметь формат XX.YY.ZZ\n(или два кода через запятую: XX.YY.ZZ, AA.BB.CC)."
+                "Код ГРНТИ должен иметь формат XX.YY.ZZ (или XX.YY)\n(допускается два кода через запятую)."
             )
             self.txt_grnti.setFocus()
             return
