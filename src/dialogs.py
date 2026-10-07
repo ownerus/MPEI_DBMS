@@ -52,6 +52,7 @@ class ProjectDialog(QDialog):
         self.mode = mode
         self.record_data = record_data or {}
         self.default_codkon = default_codkon
+        self.suggested_codproj = None
         self.db_path = db_path or Path(__file__).resolve().parent.parent / "databases" / "grants.db"
 
         title = "Добавление проекта НИР" if mode == "add" else "Редактирование проекта НИР"
@@ -164,12 +165,14 @@ class ProjectDialog(QDialog):
         self.combo_konk.setCurrentIndex(selected_idx)
         self.combo_konk.blockSignals(False)
 
-        # Рассчитываем актуальный номер для выбранного конкурса сразу
+        # Рассчитываем рекомендуемый номер для выбранного конкурса в качестве подсказки
         if self.mode == "add":
             active_codkon = self.combo_konk.currentData() or 1
             cur.execute("SELECT COALESCE(MAX(codproj), 0) FROM gr_proj WHERE codkon = ?", (active_codkon,))
             max_cod = cur.fetchone()[0]
-            self.txt_codproj.setText(str(max_cod + 1))
+            self.suggested_codproj = max_cod + 1
+            self.txt_codproj.clear()
+            self.txt_codproj.setPlaceholderText(str(self.suggested_codproj))
 
         # 2. Вузы (по дефолту пустой выбор)
         self.combo_vuz.clear()
@@ -183,13 +186,15 @@ class ProjectDialog(QDialog):
         conn.close()
 
     def _on_contest_changed(self, index: int):
-        """При выборе конкурса в режиме добавления рассчитываем подсказку MAX + 1."""
+        """При выборе конкурса предлагаем следующий порядковый номер (MAX + 1)."""
         if self.mode != "add":
             return
 
         codkon = self.combo_konk.currentData()
         if not codkon:
+            self.suggested_codproj = None
             self.txt_codproj.clear()
+            self.txt_codproj.setPlaceholderText("")
             return
 
         conn = sqlite3.connect(self.db_path)
@@ -198,8 +203,9 @@ class ProjectDialog(QDialog):
         max_cod = cur.fetchone()[0]
         conn.close()
 
-        next_cod = max_cod + 1
-        self.txt_codproj.setText(str(next_cod))
+        self.suggested_codproj = max_cod + 1
+        self.txt_codproj.clear()
+        self.txt_codproj.setPlaceholderText(str(self.suggested_codproj))
 
     def _fill_existing_data(self):
         """Предзаполнение полей при редактировании записи."""
@@ -245,11 +251,19 @@ class ProjectDialog(QDialog):
             return
 
         codproj_text = self.txt_codproj.text().strip()
-        if not codproj_text or not codproj_text.isdigit() or int(codproj_text) <= 0:
-            QMessageBox.warning(self, "Ошибка ввода", "Укажите корректный положительный номер проекта.")
-            self.txt_codproj.setFocus()
-            return
-        codproj = int(codproj_text)
+        if not codproj_text:
+            if self.suggested_codproj:
+                codproj = self.suggested_codproj
+            else:
+                QMessageBox.warning(self, "Ошибка ввода", "Укажите номер проекта в конкурсе.")
+                self.txt_codproj.setFocus()
+                return
+        else:
+            if not codproj_text.isdigit() or int(codproj_text) <= 0:
+                QMessageBox.warning(self, "Ошибка ввода", "Укажите корректный положительный номер проекта.")
+                self.txt_codproj.setFocus()
+                return
+            codproj = int(codproj_text)
 
         # Проверка уникальности составного ключа (codkon, codproj) при добавлении
         if self.mode == "add":
