@@ -280,16 +280,16 @@ class MainWindow(QMainWindow):
         elif table_name == "vuz":
             headers = {
                 0: "Код вуза",
-                1: "Наименование вуза",
-                2: "Полное наименование",
-                3: "Аббревиатура",
-                4: "Статус",
-                5: "Город",
-                6: "Федеральный округ",
-                7: "Код региона",
-                8: "Субъект РФ",
-                9: "Ведомство",
-                10: "Профиль",
+                1: "Аббревиатура",
+                2: "Статус",
+                3: "Город",
+                4: "Федеральный округ",
+                5: "Субъект РФ",
+                6: "Профиль",
+                7: "Ведомство",
+                8: "Код региона",
+                9: "Наименование вуза",
+                10: "Полное наименование",
             }
 
         for col, text in headers.items():
@@ -323,7 +323,7 @@ class MainWindow(QMainWindow):
 
             if table_name == "gr_proj" and col == 16:  # Длинная тема НИР
                 target_width = max(target_width, 380)
-            elif table_name == "vuz" and col in (1, 2):  # Длинные наименования вузов
+            elif table_name == "vuz" and col in (9, 10):  # Длинные наименования вузов справа
                 target_width = max(target_width, 320)
 
             self.table_view.setColumnWidth(col, target_width)
@@ -342,12 +342,10 @@ class MainWindow(QMainWindow):
 
         self._update_status()
 
-    def _update_status(self, custom_msg: str = None):
+    def _update_status(self):
         """Обновление строки состояния."""
         count = self.current_model.rowCount() if self.current_model else 0
-        if custom_msg:
-            self.lbl_status.setText(f"{custom_msg} | Записей: {count}")
-        elif self.current_filter_where and self.current_table_name == "gr_proj":
+        if self.current_filter_where and self.current_table_name == "gr_proj":
             self.lbl_status.setText(f"Записей: {count} (фильтр: {self.current_filter_summary})")
         else:
             self.lbl_status.setText(f"Всего записей: {count}")
@@ -359,14 +357,20 @@ class MainWindow(QMainWindow):
         self.current_model.setCustomOrder("codkon ASC, codproj ASC")
         while self.current_model.canFetchMore():
             self.current_model.fetchMore()
-        self._update_status("Упорядочено по ключу (Конкурс + Код НИР)")
+        self._update_status()
 
     def _on_add_record(self):
         """Добавление нового проекта НИР."""
         if self.current_table_name != "gr_proj":
             return
 
-        dlg = ProjectDialog(self, mode="add", db_path=DB_PATH)
+        default_codkon = 1
+        sel = self.table_view.selectionModel().selectedRows()
+        if sel:
+            rec = self.current_model.record(sel[0].row())
+            default_codkon = rec.value("codkon") or 1
+
+        dlg = ProjectDialog(self, mode="add", default_codkon=default_codkon, db_path=DB_PATH)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             d = dlg.result_data
 
@@ -409,7 +413,7 @@ class MainWindow(QMainWindow):
                     self.table_view.scrollTo(self.current_model.index(r, 1))
                     break
 
-            self._update_status(f"Проект №{d['codproj']} (Конкурс {d['codkon']}) добавлен")
+            self._update_status()
 
     def _on_edit_record(self):
         """Редактирование выбранного проекта НИР."""
@@ -482,7 +486,7 @@ class MainWindow(QMainWindow):
                     self.table_view.scrollTo(self.current_model.index(r, 1))
                     break
 
-            self._update_status(f"Проект №{d['codproj']} (Конкурс {d['codkon']}) обновлен")
+            self._update_status()
 
     def _on_delete_record(self):
         """Удаление строго одной выделенной записи с запросом подтверждения."""
@@ -502,17 +506,21 @@ class MainWindow(QMainWindow):
         leader_fio = rec.value("leader_fio")
         plan_fin = int(rec.value("plan_fin") or 0)
 
-        ans = QMessageBox.question(
-            self,
-            "Подтверждение удаления",
+        # Диалог подтверждения с русскими кнопками "Да" и "Нет"
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Подтверждение удаления")
+        msg_box.setText(
             f"Вы действительно хотите удалить проект №{codproj} конкурса №{codkon}?\n\n"
             f"Руководитель: {leader_fio}\n"
-            f"План финансирования: {plan_fin} руб.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+            f"План финансирования: {plan_fin} руб."
         )
+        msg_box.setIcon(QMessageBox.Icon.Question)
+        btn_yes = msg_box.addButton("Да", QMessageBox.ButtonRole.YesRole)
+        btn_no = msg_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
+        msg_box.setDefaultButton(btn_no)
+        msg_box.exec()
 
-        if ans == QMessageBox.StandardButton.Yes:
+        if msg_box.clickedButton() == btn_yes:
             conn = sqlite3.connect(DB_PATH)
             cur = conn.cursor()
             cur.execute("DELETE FROM gr_proj WHERE id = ?", (proj_id,))
@@ -529,7 +537,7 @@ class MainWindow(QMainWindow):
             while self.current_model.canFetchMore():
                 self.current_model.fetchMore()
 
-            self._update_status(f"Проект №{codproj} конкурса №{codkon} удален")
+            self._update_status()
 
     def _on_filter(self):
         """Открытие диалогового окна сложной фильтрации."""

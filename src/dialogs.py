@@ -23,7 +23,7 @@ class GrntiLineEdit(QLineEdit):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setPlaceholderText("Например: 55.22.01 или 55.22.01, 44.33.22")
+        self.setPlaceholderText("Например: 55.22.01")
         self.textEdited.connect(self._on_text_edited)
 
     def _on_text_edited(self, text: str):
@@ -47,10 +47,11 @@ class GrntiLineEdit(QLineEdit):
 class ProjectDialog(QDialog):
     """Модальное окно добавления / редактирования проекта НИР."""
 
-    def __init__(self, parent=None, mode="add", record_data=None, db_path=None):
+    def __init__(self, parent=None, mode="add", record_data=None, default_codkon=1, db_path=None):
         super().__init__(parent)
         self.mode = mode
         self.record_data = record_data or {}
+        self.default_codkon = default_codkon
         self.db_path = db_path or Path(__file__).resolve().parent.parent / "databases" / "grants.db"
 
         title = "Добавление проекта НИР" if mode == "add" else "Редактирование проекта НИР"
@@ -75,7 +76,6 @@ class ProjectDialog(QDialog):
 
         self.txt_codproj = QLineEdit()
         self.txt_codproj.setValidator(QIntValidator(1, 999999, self))
-        self.txt_codproj.setPlaceholderText("Выберите конкурс для подсказки (MAX + 1)")
 
         layout_key.addRow("Конкурс:", self.combo_konk)
         layout_key.addRow("Код НИР в конкурсе:", self.txt_codproj)
@@ -94,16 +94,16 @@ class ProjectDialog(QDialog):
         layout_leader = QFormLayout(grp_leader)
 
         self.txt_leader_fio = QLineEdit()
-        self.txt_leader_fio.setPlaceholderText("Фамилия И.О.")
+        self.txt_leader_fio.setPlaceholderText("Иванов И.И.")
 
         self.txt_leader_post = QLineEdit()
-        self.txt_leader_post.setPlaceholderText("Например: профессор, доцент, зав. кафедрой")
+        self.txt_leader_post.setPlaceholderText("Например: профессор")
 
         self.txt_leader_rank = QLineEdit()
-        self.txt_leader_rank.setPlaceholderText("Например: профессор, доцент, с.н.с.")
+        self.txt_leader_rank.setPlaceholderText("Например: доцент")
 
         self.txt_leader_degree = QLineEdit()
-        self.txt_leader_degree.setPlaceholderText("Например: д.т.н., к.т.н.")
+        self.txt_leader_degree.setPlaceholderText("Например: д.т.н.")
 
         layout_leader.addRow("Ф.И.О. руководителя:", self.txt_leader_fio)
         layout_leader.addRow("Должность:", self.txt_leader_post)
@@ -117,13 +117,13 @@ class ProjectDialog(QDialog):
 
         self.txt_proj_name = QTextEdit()
         self.txt_proj_name.setMaximumHeight(70)
-        self.txt_proj_name.setPlaceholderText("Полное наименование темы исследования")
+        self.txt_proj_name.setPlaceholderText("Наименование темы исследования")
 
         self.txt_grnti = GrntiLineEdit()
 
         self.txt_plan_fin = QLineEdit()
         self.txt_plan_fin.setValidator(QIntValidator(0, 1000000000, self))
-        self.txt_plan_fin.setPlaceholderText("Сумма в рублях (целое число)")
+        self.txt_plan_fin.setPlaceholderText("Сумма в рублях")
 
         layout_details.addRow("Тема НИР:", self.txt_proj_name)
         layout_details.addRow("Рубрикатор ГРНТИ:", self.txt_grnti)
@@ -146,22 +146,32 @@ class ProjectDialog(QDialog):
         main_layout.addLayout(btn_layout)
 
     def _load_reference_data(self):
-        """Загрузка справочников конкурсов и вузов с пустой дефолтной позицией."""
+        """Загрузка справочников конкурсов и вузов."""
         conn = sqlite3.connect(self.db_path)
         cur = conn.cursor()
 
-        # 1. Конкурсы (по дефолту пусто)
+        # 1. Конкурсы
         self.combo_konk.blockSignals(True)
         self.combo_konk.clear()
-        self.combo_konk.addItem("", userData=None)
 
         cur.execute("SELECT codkon, konk_name FROM gr_konk ORDER BY codkon")
-        for codkon, name in cur.fetchall():
+        selected_idx = 0
+        for i, (codkon, name) in enumerate(cur.fetchall()):
             self.combo_konk.addItem(f"{codkon}: {name}", userData=codkon)
-        self.combo_konk.setCurrentIndex(0)
+            if codkon == self.default_codkon:
+                selected_idx = i
+
+        self.combo_konk.setCurrentIndex(selected_idx)
         self.combo_konk.blockSignals(False)
 
-        # 2. Вузы (по дефолту пусто)
+        # Рассчитываем актуальный номер для выбранного конкурса сразу
+        if self.mode == "add":
+            active_codkon = self.combo_konk.currentData() or 1
+            cur.execute("SELECT COALESCE(MAX(codproj), 0) FROM gr_proj WHERE codkon = ?", (active_codkon,))
+            max_cod = cur.fetchone()[0]
+            self.txt_codproj.setText(str(max_cod + 1))
+
+        # 2. Вузы (по дефолту пустой выбор)
         self.combo_vuz.clear()
         self.combo_vuz.addItem("", userData=(None, ""))
 
@@ -170,7 +180,6 @@ class ProjectDialog(QDialog):
             label = f"{short_name} — {full_name}" if full_name else short_name
             self.combo_vuz.addItem(label, userData=(codvuz, short_name))
         self.combo_vuz.setCurrentIndex(0)
-
         conn.close()
 
     def _on_contest_changed(self, index: int):
@@ -181,7 +190,6 @@ class ProjectDialog(QDialog):
         codkon = self.combo_konk.currentData()
         if not codkon:
             self.txt_codproj.clear()
-            self.txt_codproj.setPlaceholderText("Выберите конкурс для подсказки (MAX + 1)")
             return
 
         conn = sqlite3.connect(self.db_path)
