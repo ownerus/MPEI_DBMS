@@ -512,7 +512,7 @@ class MainWindow(QMainWindow):
         msg_box.setText(
             f"Вы действительно хотите удалить проект №{codproj} конкурса №{codkon}?\n\n"
             f"Руководитель: {leader_fio}\n"
-            f"План финансирования: {plan_fin} руб."
+            f"План финансирования: {plan_fin}"
         )
         msg_box.setIcon(QMessageBox.Icon.Question)
         btn_yes = msg_box.addButton("Да", QMessageBox.ButtonRole.YesRole)

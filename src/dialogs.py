@@ -123,7 +123,7 @@ class ProjectDialog(QDialog):
 
         self.txt_plan_fin = QLineEdit()
         self.txt_plan_fin.setValidator(QIntValidator(0, 1000000000, self))
-        self.txt_plan_fin.setPlaceholderText("Сумма в рублях")
+        self.txt_plan_fin.setPlaceholderText("Целое число")
 
         layout_details.addRow("Тема НИР:", self.txt_proj_name)
         layout_details.addRow("Рубрикатор ГРНТИ:", self.txt_grnti)
