@@ -30,6 +30,9 @@ def build_contest_report(db_path: Path, filter_where: str = ""):
     where_sql = f"WHERE {filter_where}" if filter_where else ""
 
     query = f"""
+    WITH filtered_proj AS (
+        SELECT * FROM gr_proj {where_sql}
+    )
     SELECT 
         k.codkon,
         k.konk_name,
@@ -37,8 +40,7 @@ def build_contest_report(db_path: Path, filter_where: str = ""):
         COALESCE(SUM(p.plan_fin), 0) AS total_plan,
         COUNT(DISTINCT p.codvuz) AS vuz_count
     FROM gr_konk k
-    JOIN gr_proj p ON k.codkon = p.codkon
-    {where_sql}
+    JOIN filtered_proj p ON k.codkon = p.codkon
     GROUP BY k.codkon, k.konk_name
     ORDER BY k.codkon
     """
@@ -108,6 +110,9 @@ def build_vuz_report(db_path: Path, filter_where: str = ""):
     where_sql = f"WHERE {filter_where}" if filter_where else ""
 
     query = f"""
+    WITH filtered_proj AS (
+        SELECT * FROM gr_proj {where_sql}
+    )
     SELECT 
         v.codvuz,
         COALESCE(v.vuz_short_name, v.vuz_name) AS vuz_name,
@@ -116,9 +121,8 @@ def build_vuz_report(db_path: Path, filter_where: str = ""):
         COUNT(p.id) AS nir_count,
         COALESCE(SUM(p.plan_fin), 0) AS total_plan,
         COUNT(DISTINCT p.codkon) AS contest_count
-    FROM gr_proj p
+    FROM filtered_proj p
     JOIN vuz v ON p.codvuz = v.codvuz
-    {where_sql}
     GROUP BY v.codvuz, v.vuz_short_name, v.city, v.obl_name
     ORDER BY nir_count DESC, total_plan DESC, v.codvuz ASC
     """
@@ -193,6 +197,9 @@ def build_region_report(db_path: Path, filter_where: str = ""):
     where_sql = f"WHERE {filter_where}" if filter_where else ""
 
     query = f"""
+    WITH filtered_proj AS (
+        SELECT * FROM gr_proj {where_sql}
+    )
     SELECT 
         COALESCE(v.obl_code, '') AS obl_code,
         COALESCE(v.obl_name, 'Не указан') AS obl_name,
@@ -200,9 +207,8 @@ def build_region_report(db_path: Path, filter_where: str = ""):
         COUNT(p.id) AS nir_count,
         COALESCE(SUM(p.plan_fin), 0) AS total_plan,
         COUNT(DISTINCT p.codvuz) AS vuz_count
-    FROM gr_proj p
+    FROM filtered_proj p
     JOIN vuz v ON p.codvuz = v.codvuz
-    {where_sql}
     GROUP BY v.obl_code, v.obl_name, v.region
     ORDER BY nir_count DESC, total_plan DESC, v.obl_name ASC
     """

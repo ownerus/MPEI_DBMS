@@ -171,27 +171,27 @@ class MainWindow(QMainWindow):
         self.combo_view.setMinimumWidth(215)
         self.combo_view.currentIndexChanged.connect(self._on_section_changed)
 
-        self.btn_add = QPushButton("➕ Добавить")
+        self.btn_add = QPushButton("Добавить")
         self.btn_add.clicked.connect(self._on_add_record)
 
-        self.btn_edit = QPushButton("✏️ Изменить")
+        self.btn_edit = QPushButton("Изменить")
         self.btn_edit.clicked.connect(self._on_edit_record)
 
-        self.btn_delete = QPushButton("🗑️ Удалить")
+        self.btn_delete = QPushButton("Удалить")
         self.btn_delete.clicked.connect(self._on_delete_record)
 
-        self.btn_key_sort = QPushButton("🔑 По ключу")
+        self.btn_key_sort = QPushButton("Сортировка по ключу")
         self.btn_key_sort.setToolTip("Упорядочить по первичному составному ключу (Конкурс + Код НИР)")
         self.btn_key_sort.clicked.connect(self._sort_by_key)
 
-        self.btn_filter = QPushButton("🔍 Фильтр")
+        self.btn_filter = QPushButton("Фильтр")
         self.btn_filter.clicked.connect(self._on_filter)
 
-        self.btn_clear_filter = QPushButton("❌ Снять фильтр")
+        self.btn_clear_filter = QPushButton("Снять фильтр")
         self.btn_clear_filter.setVisible(False)
         self.btn_clear_filter.clicked.connect(self._on_clear_filter)
 
-        self.btn_save_as = QPushButton("💾 Сохранить как...")
+        self.btn_save_as = QPushButton("Сохранить как...")
         self.btn_save_as.setToolTip("Сохранить открытый документ или таблицу в файл Excel, HTML, CSV или TXT (Ctrl+S)")
         self.btn_save_as.clicked.connect(self._on_save_as)
 
@@ -247,7 +247,7 @@ class MainWindow(QMainWindow):
         self.combo_report.setMinimumWidth(390)
         self.combo_report.currentIndexChanged.connect(self._on_report_changed)
 
-        self.btn_report_refresh = QPushButton("🔄 Обновить")
+        self.btn_report_refresh = QPushButton("Обновить")
         self.btn_report_refresh.clicked.connect(self.refresh_current_report)
 
         self.lbl_report_info = QLabel("")
