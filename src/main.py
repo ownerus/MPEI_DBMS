@@ -467,20 +467,7 @@ class MainWindow(QMainWindow):
         fin_bar.addWidget(self.btn_fin_statement)
         fin_bar.addStretch()
         layout_fin.addLayout(fin_bar)
-
-        self.lbl_fin_info = QLabel(
-            "Раздел «Финансирование проектов НИР»\n\n"
-            "Запланированные модули:\n"
-            "• Выпуск распоряжения: проведение фактического финансирования и распределение средств по кварталам\n"
-            "• Сводная ведомость: расчет перечислений средств по вузам-исполнителям\n\n"
-            "Модуль подготовлен к реализации алгоритмов ЛР №4."
-        )
-        self.lbl_fin_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_fin_info.setStyleSheet(
-            "font-size: 13px; color: #24292f; line-height: 1.6; "
-            "background-color: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 24px;"
-        )
-        layout_fin.addWidget(self.lbl_fin_info)
+        layout_fin.addStretch()
         self.stack.addWidget(tab_fin)
 
         main_layout.addWidget(self.stack)
