@@ -3,11 +3,13 @@ import sqlite3
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont, QColor
 from PyQt6.QtSql import QSqlDatabase, QSqlTableModel
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -16,6 +18,8 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QStackedWidget,
     QTableView,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -28,9 +32,23 @@ if str(BASE_DIR) not in sys.path:
 try:
     from src.database import DB_PATH, connect_db
     from src.dialogs import ProjectDialog, FilterDialog
+    from src.reports import (
+        build_contest_report,
+        build_vuz_report,
+        build_region_report,
+        export_report_to_file,
+        _format_money,
+    )
 except ModuleNotFoundError:
     from database import DB_PATH, connect_db
     from dialogs import ProjectDialog, FilterDialog
+    from reports import (
+        build_contest_report,
+        build_vuz_report,
+        build_region_report,
+        export_report_to_file,
+        _format_money,
+    )
 
 
 class GrantsTableModel(QSqlTableModel):
@@ -50,7 +68,7 @@ class GrantsTableModel(QSqlTableModel):
         return super().orderByClause()
 
     def sort(self, column: int, order: Qt.SortOrder):
-        # При клике на конкретный столбец сбрасываем пользовательский составной ORDER BY
+        # При клике на заголовок столбца сбрасываем пользовательский составной ORDER BY
         self._custom_order = ""
         super().sort(column, order)
 
@@ -61,7 +79,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("СУБД: Сопровождение конкурсов на соискание грантов (Вариант 7)")
-        self.resize(1180, 680)
+        self.resize(1200, 680)
 
         # Текущее состояние
         self.current_model = None
@@ -69,6 +87,7 @@ class MainWindow(QMainWindow):
         self.current_filters = {}
         self.current_filter_where = ""
         self.current_filter_summary = ""
+        self.current_report_data = None
 
         self._init_menu()
         self._init_ui()
@@ -79,6 +98,18 @@ class MainWindow(QMainWindow):
     def _init_menu(self):
         """Создание главного меню приложения."""
         menubar = self.menuBar()
+
+        # Меню "Файл"
+        menu_file = menubar.addMenu("Файл")
+        act_save_as = menu_file.addAction("Сохранить как...")
+        act_save_as.setShortcut("Ctrl+S")
+        act_save_as.triggered.connect(self._on_save_as)
+
+        menu_file.addSeparator()
+
+        act_exit = menu_file.addAction("Выход")
+        act_exit.setShortcut("Ctrl+Q")
+        act_exit.triggered.connect(self.close)
 
         # Меню "Данные"
         menu_data = menubar.addMenu("Данные")
@@ -91,16 +122,16 @@ class MainWindow(QMainWindow):
         act_vuz = menu_data.addAction("Справочник вузов")
         act_vuz.triggered.connect(lambda: self.combo_view.setCurrentIndex(2))
 
-        # Меню "Анализ"
+        # Меню "Анализ" (Лабораторная работа №3)
         menu_analysis = menubar.addMenu("Анализ")
-        act_an_vuz = menu_analysis.addAction("Распределение НИР по вузам")
-        act_an_vuz.triggered.connect(lambda: self.combo_view.setCurrentIndex(3))
-
         act_an_konk = menu_analysis.addAction("Распределение НИР по конкурсам")
-        act_an_konk.triggered.connect(lambda: self.combo_view.setCurrentIndex(3))
+        act_an_konk.triggered.connect(lambda: self._switch_to_report(0))
+
+        act_an_vuz = menu_analysis.addAction("Распределение НИР по вузам")
+        act_an_vuz.triggered.connect(lambda: self._switch_to_report(1))
 
         act_an_reg = menu_analysis.addAction("Распределение НИР по регионам РФ")
-        act_an_reg.triggered.connect(lambda: self.combo_view.setCurrentIndex(3))
+        act_an_reg.triggered.connect(lambda: self._switch_to_report(2))
 
         # Меню "Финансирование"
         menu_finance = menubar.addMenu("Финансирование")
@@ -120,11 +151,14 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(10, 8, 10, 10)
+        main_layout.setSpacing(6)
 
-        # 1. Верхняя панель: выбор текущего экрана/таблицы
-        top_layout = QHBoxLayout()
-        lbl_section = QLabel("Раздел системы:")
-        lbl_section.setStyleSheet("font-weight: bold;")
+        # 1. Единая компактная панель инструментов (toolbar) над таблицей:
+        # Селектор разделов (без подписи "Раздел системы:"), кнопки действий с иконками и счетчик
+        toolbar_layout = QHBoxLayout()
+        toolbar_layout.setContentsMargins(0, 0, 0, 2)
+        toolbar_layout.setSpacing(6)
 
         self.combo_view = QComboBox()
         self.combo_view.addItems([
@@ -134,77 +168,111 @@ class MainWindow(QMainWindow):
             "Анализ данных",
             "Финансирование",
         ])
+        self.combo_view.setMinimumWidth(215)
         self.combo_view.currentIndexChanged.connect(self._on_section_changed)
 
-        top_layout.addWidget(lbl_section)
-        top_layout.addWidget(self.combo_view, stretch=1)
-        main_layout.addLayout(top_layout)
+        self.btn_add = QPushButton("➕ Добавить")
+        self.btn_add.clicked.connect(self._on_add_record)
 
-        # 2. Центральная область (стек: таблицы данных или отчеты)
+        self.btn_edit = QPushButton("✏️ Изменить")
+        self.btn_edit.clicked.connect(self._on_edit_record)
+
+        self.btn_delete = QPushButton("🗑️ Удалить")
+        self.btn_delete.clicked.connect(self._on_delete_record)
+
+        self.btn_key_sort = QPushButton("🔑 По ключу")
+        self.btn_key_sort.setToolTip("Упорядочить по первичному составному ключу (Конкурс + Код НИР)")
+        self.btn_key_sort.clicked.connect(self._sort_by_key)
+
+        self.btn_filter = QPushButton("🔍 Фильтр")
+        self.btn_filter.clicked.connect(self._on_filter)
+
+        self.btn_clear_filter = QPushButton("❌ Снять фильтр")
+        self.btn_clear_filter.setVisible(False)
+        self.btn_clear_filter.clicked.connect(self._on_clear_filter)
+
+        self.btn_save_as = QPushButton("💾 Сохранить как...")
+        self.btn_save_as.setToolTip("Сохранить открытый документ или таблицу в файл Excel, HTML, CSV или TXT (Ctrl+S)")
+        self.btn_save_as.clicked.connect(self._on_save_as)
+
+        self.lbl_status = QLabel("Всего записей: 0")
+        self.lbl_status.setStyleSheet("font-weight: 500;")
+
+        toolbar_layout.addWidget(self.combo_view)
+        toolbar_layout.addWidget(self.btn_add)
+        toolbar_layout.addWidget(self.btn_edit)
+        toolbar_layout.addWidget(self.btn_delete)
+        toolbar_layout.addWidget(self.btn_key_sort)
+        toolbar_layout.addWidget(self.btn_filter)
+        toolbar_layout.addWidget(self.btn_clear_filter)
+        toolbar_layout.addWidget(self.btn_save_as)
+        toolbar_layout.addStretch()
+        toolbar_layout.addWidget(self.lbl_status)
+
+        main_layout.addLayout(toolbar_layout)
+
+        # 2. Центральная область (стек экранов)
         self.stack = QStackedWidget()
 
-        # Страница 0: Просмотр таблиц
+        # Страница 0: Просмотр таблиц (вся высота отдана таблице данных)
         table_page = QWidget()
         table_layout = QVBoxLayout(table_page)
-        table_layout.setContentsMargins(0, 5, 0, 5)
+        table_layout.setContentsMargins(0, 4, 0, 0)
+        table_layout.setSpacing(0)
 
         self.table_view = QTableView()
-        self.table_view.setSortingEnabled(True)  # Сортировка по клику на заголовок
+        self.table_view.setSortingEnabled(True)
         self.table_view.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
         self.table_view.setSelectionMode(QTableView.SelectionMode.SingleSelection)
         table_layout.addWidget(self.table_view)
 
-        # Кнопки управления данными
-        buttons_layout = QHBoxLayout()
-
-        self.btn_key_sort = QPushButton("Сортировка по ключу")
-        self.btn_key_sort.setToolTip("Упорядочить по первичному составному ключу (Конкурс + Код НИР)")
-        self.btn_key_sort.clicked.connect(self._sort_by_key)
-
-        self.btn_add = QPushButton("Добавить")
-        self.btn_add.clicked.connect(self._on_add_record)
-
-        self.btn_edit = QPushButton("Изменить")
-        self.btn_edit.clicked.connect(self._on_edit_record)
-
-        self.btn_delete = QPushButton("Удалить")
-        self.btn_delete.clicked.connect(self._on_delete_record)
-
-        self.btn_filter = QPushButton("Фильтр")
-        self.btn_filter.clicked.connect(self._on_filter)
-
-        self.btn_clear_filter = QPushButton("Снять фильтр")
-        self.btn_clear_filter.setVisible(False)
-        self.btn_clear_filter.clicked.connect(self._on_clear_filter)
-
-        buttons_layout.addWidget(self.btn_key_sort)
-        buttons_layout.addWidget(self.btn_add)
-        buttons_layout.addWidget(self.btn_edit)
-        buttons_layout.addWidget(self.btn_delete)
-        buttons_layout.addWidget(self.btn_filter)
-        buttons_layout.addWidget(self.btn_clear_filter)
-        buttons_layout.addStretch()
-
-        self.lbl_status = QLabel("Записей: 0")
-        buttons_layout.addWidget(self.lbl_status)
-
-        table_layout.addLayout(buttons_layout)
         self.stack.addWidget(table_page)
 
-        # Страница 1: Раздел Анализ
-        self.lbl_analysis_stub = QLabel(
-            "Раздел «Анализ данных»\n\n"
-            "Сводные отчетные формы:\n"
-            "• Распределение НИР по вузам\n"
-            "• Распределение НИР по конкурсам грантов\n"
-            "• Распределение НИР по субъектам РФ\n\n"
-            "Функция пока не реализована."
-        )
-        self.lbl_analysis_stub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_analysis_stub.setStyleSheet("font-size: 14px; color: #555; background: #f9f9f9; border: 1px dashed #ccc;")
-        self.stack.addWidget(self.lbl_analysis_stub)
+        # Страница 1: Раздел «Анализ данных» (ЛР3 — сводные аналитические отчеты)
+        analysis_page = QWidget()
+        analysis_layout = QVBoxLayout(analysis_page)
+        analysis_layout.setContentsMargins(0, 4, 0, 0)
+        analysis_layout.setSpacing(6)
 
-        # Страница 2: Раздел Финансирование
+        analysis_toolbar = QHBoxLayout()
+        lbl_rep = QLabel("Аналитический отчет:")
+        lbl_rep.setStyleSheet("font-weight: bold;")
+
+        self.combo_report = QComboBox()
+        self.combo_report.addItems([
+            "Форма 1: Распределение проектов НИР по конкурсам грантов",
+            "Форма 2: Распределение проектов НИР по вузам-исполнителям",
+            "Форма 3: Распределение проектов НИР по субъектам РФ",
+        ])
+        self.combo_report.setMinimumWidth(390)
+        self.combo_report.currentIndexChanged.connect(self._on_report_changed)
+
+        self.btn_report_refresh = QPushButton("🔄 Обновить")
+        self.btn_report_refresh.clicked.connect(self.refresh_current_report)
+
+        self.lbl_report_info = QLabel("")
+
+        analysis_toolbar.addWidget(lbl_rep)
+        analysis_toolbar.addWidget(self.combo_report)
+        analysis_toolbar.addWidget(self.btn_report_refresh)
+        analysis_toolbar.addStretch()
+        analysis_toolbar.addWidget(self.lbl_report_info)
+        analysis_layout.addLayout(analysis_toolbar)
+
+        self.report_table = QTableWidget()
+        self.report_table.setAlternatingRowColors(True)
+        self.report_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.report_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.report_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        analysis_layout.addWidget(self.report_table)
+
+        self.stack.addWidget(analysis_page)
+
+        # Страница 2: Раздел «Финансирование»
+        finance_page = QWidget()
+        finance_layout = QVBoxLayout(finance_page)
+        finance_layout.setContentsMargins(0, 4, 0, 0)
+
         self.lbl_finance_stub = QLabel(
             "Раздел «Финансирование»\n\n"
             "Функции раздела:\n"
@@ -214,12 +282,38 @@ class MainWindow(QMainWindow):
         )
         self.lbl_finance_stub.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_finance_stub.setStyleSheet("font-size: 14px; color: #555; background: #f9f9f9; border: 1px dashed #ccc;")
-        self.stack.addWidget(self.lbl_finance_stub)
+        finance_layout.addWidget(self.lbl_finance_stub)
+
+        self.stack.addWidget(finance_page)
 
         main_layout.addWidget(self.stack)
 
+    def _switch_to_report(self, form_idx: int):
+        """Переключение на указанную аналитическую форму из меню."""
+        self.combo_view.setCurrentIndex(3)
+        self.combo_report.setCurrentIndex(form_idx)
+        self.refresh_current_report()
+
+    def _on_report_changed(self, index: int):
+        """Смена аналитической формы в комбобоксе отчетов."""
+        self.refresh_current_report()
+
     def _on_section_changed(self, index: int):
         """Обработка переключения разделов."""
+        is_proj = (index == 0)
+        is_table = (index in (0, 1, 2))
+        is_analysis = (index == 3)
+
+        # Управление доступностью кнопок на главной панели
+        self.btn_add.setEnabled(is_proj)
+        self.btn_edit.setEnabled(is_proj)
+        self.btn_delete.setEnabled(is_proj)
+        self.btn_key_sort.setEnabled(is_proj)
+        self.btn_filter.setEnabled(is_proj or is_analysis)
+        self.btn_clear_filter.setEnabled(bool(self.current_filter_where))
+        self.btn_clear_filter.setVisible(bool(self.current_filter_where))
+        self.btn_save_as.setEnabled(is_table or is_analysis)
+
         if index == 0:
             self.stack.setCurrentIndex(0)
             self.show_table("gr_proj")
@@ -231,8 +325,10 @@ class MainWindow(QMainWindow):
             self.show_table("vuz")
         elif index == 3:
             self.stack.setCurrentIndex(1)
+            self.refresh_current_report()
         elif index == 4:
             self.stack.setCurrentIndex(2)
+            self.lbl_status.setText("Раздел финансирования")
 
     def show_table(self, table_name: str):
         """Отображение таблицы БД с индивидуальной фиксированной шапкой и автошириной."""
@@ -260,14 +356,13 @@ class MainWindow(QMainWindow):
                 15: "Степень",
                 16: "Тема НИР",
             }
-            # Если есть активный фильтр, применяем его
             if self.current_filter_where:
                 self.current_model.setFilter(self.current_filter_where)
 
         elif table_name == "gr_konk":
             headers = {
                 0: "Код конкурса",
-                1: "Название конкурса",  # По ТЗ и требованию Полотнова
+                1: "Название конкурса",
                 2: "План",
                 3: "Факт",
                 4: "Квартал 1",
@@ -328,13 +423,14 @@ class MainWindow(QMainWindow):
 
             self.table_view.setColumnWidth(col, target_width)
 
-        # Управление доступностью кнопок (CRUD и фильтр ориентированы на таблицу проектов)
+        # Управление доступностью кнопок
         is_proj = (table_name == "gr_proj")
         self.btn_key_sort.setEnabled(is_proj)
         self.btn_add.setEnabled(is_proj)
         self.btn_edit.setEnabled(is_proj)
         self.btn_delete.setEnabled(is_proj)
         self.btn_filter.setEnabled(is_proj)
+        self.btn_save_as.setEnabled(True)
 
         has_filter = is_proj and bool(self.current_filter_where)
         self.btn_clear_filter.setVisible(has_filter)
@@ -344,15 +440,111 @@ class MainWindow(QMainWindow):
 
     def _update_status(self):
         """Обновление строки состояния."""
+        if self.combo_view.currentIndex() == 3:
+            return
         count = self.current_model.rowCount() if self.current_model else 0
         if self.current_filter_where and self.current_table_name == "gr_proj":
             self.lbl_status.setText(f"Записей: {count} (фильтр: {self.current_filter_summary})")
         else:
             self.lbl_status.setText(f"Всего записей: {count}")
 
+    def refresh_current_report(self):
+        """Формирование и отрисовка текущего аналитического отчета (ЛР3)."""
+        idx = self.combo_report.currentIndex()
+        if idx == 0:
+            report_data = build_contest_report(DB_PATH, self.current_filter_where)
+        elif idx == 1:
+            report_data = build_vuz_report(DB_PATH, self.current_filter_where)
+        else:
+            report_data = build_region_report(DB_PATH, self.current_filter_where)
+
+        self.current_report_data = report_data
+        self.render_report(report_data)
+
+    def render_report(self, report_data: dict):
+        """Отрисовка отчета в self.report_table."""
+        headers = report_data.get("headers", [])
+        rows = report_data.get("rows", [])
+        totals = report_data.get("totals", [])
+        money_cols = set(report_data.get("money_cols", []))
+        numeric_cols = set(report_data.get("numeric_cols", []))
+
+        total_row_count = len(rows) + (1 if totals else 0)
+        self.report_table.setRowCount(total_row_count)
+        self.report_table.setColumnCount(len(headers))
+        self.report_table.setHorizontalHeaderLabels(headers)
+
+        # Заполнение строк данных
+        for row_idx, r in enumerate(rows):
+            for col_idx, val in enumerate(r):
+                if col_idx in money_cols:
+                    val_str = _format_money(val)
+                    align = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                elif col_idx in numeric_cols:
+                    val_str = str(val)
+                    align = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                elif col_idx == 0:
+                    val_str = str(val)
+                    align = Qt.AlignmentFlag.AlignCenter
+                else:
+                    val_str = str(val)
+                    align = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+
+                item = QTableWidgetItem(val_str)
+                item.setTextAlignment(align)
+                item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+                self.report_table.setItem(row_idx, col_idx, item)
+
+        # Заполнение строки ИТОГО
+        if totals:
+            tot_row_idx = len(rows)
+            for col_idx, val in enumerate(totals):
+                if col_idx in money_cols:
+                    val_str = _format_money(val) if val != "" else ""
+                    align = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                elif col_idx in numeric_cols:
+                    val_str = str(val) if val != "" else ""
+                    align = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                elif col_idx == 0:
+                    val_str = str(val)
+                    align = Qt.AlignmentFlag.AlignCenter
+                else:
+                    val_str = str(val)
+                    align = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+
+                item = QTableWidgetItem(val_str)
+                item.setTextAlignment(align)
+                item.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+                item.setBackground(QColor(255, 242, 204))
+                item.setForeground(QColor(0, 0, 0))
+                item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+                self.report_table.setItem(tot_row_idx, col_idx, item)
+
+        # Автоподбор ширины столбцов
+        header = self.report_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setStretchLastSection(True)
+        self.report_table.resizeColumnsToContents()
+
+        fm = self.report_table.fontMetrics()
+        for col in range(len(headers)):
+            h_text = headers[col]
+            h_width = fm.horizontalAdvance(h_text) + 24
+            c_width = self.report_table.columnWidth(col)
+            self.report_table.setColumnWidth(col, max(h_width, c_width, 90))
+
+        # Обновление текста состояния
+        status_txt = f"Строк: {len(rows)}"
+        if self.current_filter_where:
+            status_txt += f" (фильтр: {self.current_filter_summary})"
+            self.lbl_status.setText(f"Отчет: {len(rows)} строк (фильтр: {self.current_filter_summary})")
+        else:
+            self.lbl_status.setText(f"Отчет: {len(rows)} строк (полная база)")
+        self.lbl_report_info.setText(status_txt)
+
     def _sort_by_key(self):
         """Сортировка по составному первичному ключу (Конкурс + Код НИР)."""
-        if self.current_table_name != "gr_proj":
+        if self.current_table_name != "gr_proj" or not self.current_model:
             return
         self.current_model.setCustomOrder("codkon ASC, codproj ASC")
         while self.current_model.canFetchMore():
@@ -532,7 +724,7 @@ class MainWindow(QMainWindow):
         msg_box.setText(
             f"Вы действительно хотите удалить проект №{codproj} конкурса №{codkon}?\n\n"
             f"Руководитель: {leader_fio}\n"
-            f"План финансирования: {plan_fin}"
+            f"План финансирования: {_format_money(plan_fin)}"
         )
         msg_box.setIcon(QMessageBox.Icon.Question)
         btn_yes = msg_box.addButton("Да", QMessageBox.ButtonRole.YesRole)
@@ -561,41 +753,147 @@ class MainWindow(QMainWindow):
 
     def _on_filter(self):
         """Открытие диалогового окна сложной фильтрации."""
-        if self.current_table_name != "gr_proj":
-            return
-
         dlg = FilterDialog(self, current_filters=self.current_filters, db_path=DB_PATH)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self.current_filters = dlg.saved_filter_state
             self.current_filter_where = dlg.filter_where
             self.current_filter_summary = dlg.filter_summary
 
-            self.current_model.setFilter(self.current_filter_where)
-            self.current_model.select()
-            while self.current_model.canFetchMore():
-                self.current_model.fetchMore()
+            if self.current_table_name == "gr_proj" and self.current_model:
+                self.current_model.setFilter(self.current_filter_where)
+                self.current_model.select()
+                while self.current_model.canFetchMore():
+                    self.current_model.fetchMore()
 
-            if self.current_filter_where:
-                self.btn_clear_filter.setVisible(True)
-                self.btn_clear_filter.setEnabled(True)
+            has_flt = bool(self.current_filter_where)
+            self.btn_clear_filter.setVisible(has_flt)
+            self.btn_clear_filter.setEnabled(has_flt)
+
+            if self.combo_view.currentIndex() == 3:
+                self.refresh_current_report()
             else:
-                self.btn_clear_filter.setVisible(False)
-                self.btn_clear_filter.setEnabled(False)
-            self._update_status()
+                self._update_status()
 
     def _on_clear_filter(self):
         """Сброс активного фильтра."""
         self.current_filters = {}
         self.current_filter_where = ""
         self.current_filter_summary = ""
-        self.current_model.setFilter("")
-        self.current_model.select()
-        while self.current_model.canFetchMore():
-            self.current_model.fetchMore()
+
+        if self.current_table_name == "gr_proj" and self.current_model:
+            self.current_model.setFilter("")
+            self.current_model.select()
+            while self.current_model.canFetchMore():
+                self.current_model.fetchMore()
 
         self.btn_clear_filter.setVisible(False)
         self.btn_clear_filter.setEnabled(False)
-        self._update_status()
+
+        if self.combo_view.currentIndex() == 3:
+            self.refresh_current_report()
+        else:
+            self._update_status()
+
+    def _on_save_as(self):
+        """Универсальный экспорт открытого в данный момент документа или таблицы."""
+        curr_idx = self.combo_view.currentIndex()
+
+        if curr_idx == 3:  # Раздел «Анализ данных»
+            if not self.current_report_data:
+                self.refresh_current_report()
+
+            rep_num = self.combo_report.currentIndex() + 1
+            default_name = f"otchet_forma_{rep_num}.xlsx"
+
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Сохранить отчет как...",
+                default_name,
+                "Таблица Excel (*.xlsx);;Веб-страница HTML (*.html);;Текстовый документ (*.txt);;Файл CSV (*.csv)"
+            )
+            if not file_path:
+                return
+
+            try:
+                export_report_to_file(file_path, self.current_report_data, self.current_filter_summary)
+                QMessageBox.information(
+                    self,
+                    "Экспорт завершен",
+                    f"Аналитический отчет успешно сохранен в файл:\n{file_path}"
+                )
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка сохранения", f"Не удалось сохранить отчет:\n{e}")
+
+        elif curr_idx in (0, 1, 2):  # Таблицы базы данных
+            table_name = self.current_table_name
+            table_titles = {
+                "gr_proj": "Проекты НИР по грантам",
+                "gr_konk": "Конкурсы грантов",
+                "vuz": "Справочник вузов",
+            }
+            title = table_titles.get(table_name, table_name)
+            default_name = f"{table_name}_export.xlsx"
+
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                f"Сохранить таблицу «{title}» как...",
+                default_name,
+                "Таблица Excel (*.xlsx);;Веб-страница HTML (*.html);;Текстовый документ (*.txt);;Файл CSV (*.csv)"
+            )
+            if not file_path:
+                return
+
+            try:
+                visible_cols = []
+                headers = []
+                for c in range(self.current_model.columnCount()):
+                    if not self.table_view.isColumnHidden(c):
+                        visible_cols.append(c)
+                        headers.append(str(self.current_model.headerData(c, Qt.Orientation.Horizontal) or f"Колонка {c}"))
+
+                rows = []
+                for r in range(self.current_model.rowCount()):
+                    rec = self.current_model.record(r)
+                    row_vals = []
+                    for c in visible_cols:
+                        val = rec.value(c)
+                        row_vals.append(val if val is not None else "")
+                    rows.append(row_vals)
+
+                money_cols = []
+                numeric_cols = []
+                if table_name == "gr_proj":
+                    for idx, c in enumerate(visible_cols):
+                        if c in (6, 7, 8, 9, 10, 11):
+                            money_cols.append(idx)
+                        elif c in (1, 2, 3):
+                            numeric_cols.append(idx)
+                elif table_name == "gr_konk":
+                    for idx, c in enumerate(visible_cols):
+                        if c in (2, 3, 4, 5, 6, 7):
+                            money_cols.append(idx)
+                        elif c in (0, 8):
+                            numeric_cols.append(idx)
+
+                table_report_data = {
+                    "title": f"СУБД: {title}",
+                    "headers": headers,
+                    "rows": rows,
+                    "totals": [],
+                    "money_cols": money_cols,
+                    "numeric_cols": numeric_cols,
+                }
+
+                export_report_to_file(file_path, table_report_data, self.current_filter_summary if table_name == "gr_proj" else "")
+                QMessageBox.information(
+                    self,
+                    "Экспорт завершен",
+                    f"Данные таблицы «{title}» успешно сохранены:\n{file_path}"
+                )
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка сохранения", f"Не удалось сохранить таблицу:\n{e}")
+        else:
+            QMessageBox.information(self, "Сохранить как...", "В данном разделе нет открытых документов для сохранения.")
 
     def _show_about(self):
         """Сведения о программе."""

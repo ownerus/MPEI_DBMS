@@ -156,23 +156,21 @@ class ProjectDialog(QDialog):
         self.combo_konk.clear()
 
         cur.execute("SELECT codkon, konk_name FROM gr_konk ORDER BY codkon")
-        selected_idx = 0
-        for i, (codkon, name) in enumerate(cur.fetchall()):
-            self.combo_konk.addItem(f"{codkon}: {name}", userData=codkon)
-            if codkon == self.default_codkon:
-                selected_idx = i
+        contests = cur.fetchall()
 
-        self.combo_konk.setCurrentIndex(selected_idx)
-        self.combo_konk.blockSignals(False)
-
-        # Рассчитываем рекомендуемый номер для выбранного конкурса в качестве подсказки
         if self.mode == "add":
-            active_codkon = self.combo_konk.currentData() or 1
-            cur.execute("SELECT COALESCE(MAX(codproj), 0) FROM gr_proj WHERE codkon = ?", (active_codkon,))
-            max_cod = cur.fetchone()[0]
-            self.suggested_codproj = max_cod + 1
+            self.combo_konk.addItem("", userData=None)
+            for codkon, name in contests:
+                self.combo_konk.addItem(f"{codkon}: {name}", userData=codkon)
+            self.combo_konk.setCurrentIndex(0)
+            self.suggested_codproj = None
             self.txt_codproj.clear()
-            self.txt_codproj.setPlaceholderText(str(self.suggested_codproj))
+            self.txt_codproj.setPlaceholderText("")
+        else:
+            for codkon, name in contests:
+                self.combo_konk.addItem(f"{codkon}: {name}", userData=codkon)
+
+        self.combo_konk.blockSignals(False)
 
         # 2. Вузы (по дефолту пустой выбор)
         self.combo_vuz.clear()
@@ -313,7 +311,11 @@ class ProjectDialog(QDialog):
             return
 
         plan_fin_text = self.txt_plan_fin.text().strip()
-        plan_fin = int(plan_fin_text) if plan_fin_text.isdigit() else 0
+        if not plan_fin_text.isdigit() or int(plan_fin_text) <= 0:
+            QMessageBox.warning(self, "Ошибка ввода", "Пожалуйста, укажите плановое финансирование больше 0.")
+            self.txt_plan_fin.setFocus()
+            return
+        plan_fin = int(plan_fin_text)
 
         # Собираем итоговые проверенные данные
         self.result_data = {
@@ -461,14 +463,14 @@ class FilterDialog(QDialog):
         self.combo_vuz.blockSignals(block)
 
     def _on_region_changed(self):
-        """При выборе округа фильтруем нижележащие списки."""
+        """При выборе округа строго фильтруем нижележащие списки: субъекты, города, вузы."""
         region = self.combo_region.currentText().strip()
         self._block_geo_signals(True)
 
         filtered = [r for r in self.all_vuz if (not region or r[2] == region)]
 
-        # Обновляем субъекты
-        current_obl = self.combo_obl.currentText()
+        # 1. Субъекты (строго только входящие в выбранный округ)
+        current_obl = self.combo_obl.currentText().strip()
         obls = sorted(list(set(r[3] for r in filtered if r[3])))
         self.combo_obl.clear()
         self.combo_obl.addItem("")
@@ -476,46 +478,57 @@ class FilterDialog(QDialog):
             self.combo_obl.addItem(obl)
         if current_obl in obls:
             self.combo_obl.setCurrentText(current_obl)
+        else:
+            self.combo_obl.setCurrentIndex(0)
+            current_obl = ""
 
-        # Обновляем города
-        current_city = self.combo_city.currentText()
-        cities = sorted(list(set(r[4] for r in filtered if r[4])))
+        # 2. Города (строго из отфильтрованных вузов)
+        filtered_sub = [r for r in filtered if (not current_obl or r[3] == current_obl)]
+        current_city = self.combo_city.currentText().strip()
+        cities = sorted(list(set(r[4] for r in filtered_sub if r[4])))
         self.combo_city.clear()
         self.combo_city.addItem("")
         for c in cities:
             self.combo_city.addItem(c)
         if current_city in cities:
             self.combo_city.setCurrentText(current_city)
+        else:
+            self.combo_city.setCurrentIndex(0)
+            current_city = ""
 
-        # Обновляем вузы
+        # 3. Вузы
+        filtered_final = [r for r in filtered_sub if (not current_city or r[4] == current_city)]
         current_vuz_id = self.combo_vuz.currentData()
         self.combo_vuz.clear()
         self.combo_vuz.addItem("", userData=None)
-        for codvuz, short_name, _, _, _ in sorted(filtered, key=lambda x: x[1].lower()):
+        selected_vuz_idx = 0
+        for codvuz, short_name, _, _, _ in sorted(filtered_final, key=lambda x: x[1].lower()):
             self.combo_vuz.addItem(short_name, userData=codvuz)
             if codvuz == current_vuz_id:
-                self.combo_vuz.setCurrentIndex(self.combo_vuz.count() - 1)
+                selected_vuz_idx = self.combo_vuz.count() - 1
+        self.combo_vuz.setCurrentIndex(selected_vuz_idx)
 
         self._block_geo_signals(False)
 
     def _on_obl_changed(self):
-        """При выборе субъекта подставляем округ и фильтруем города/вузы."""
+        """При выборе субъекта подставляем округ и строго фильтруем города/вузы."""
         obl = self.combo_obl.currentText().strip()
         self._block_geo_signals(True)
 
         if obl:
-            # Находим округ для выбранного субъекта
+            # Находим округ для выбранного субъекта и выставляем его
             for r in self.all_vuz:
                 if r[3] == obl and r[2]:
                     self.combo_region.setCurrentText(r[2])
                     break
+            region = self.combo_region.currentText().strip()
             filtered = [r for r in self.all_vuz if r[3] == obl]
         else:
             region = self.combo_region.currentText().strip()
             filtered = [r for r in self.all_vuz if (not region or r[2] == region)]
 
-        # Обновляем города
-        current_city = self.combo_city.currentText()
+        # Города
+        current_city = self.combo_city.currentText().strip()
         cities = sorted(list(set(r[4] for r in filtered if r[4])))
         self.combo_city.clear()
         self.combo_city.addItem("")
@@ -523,30 +536,41 @@ class FilterDialog(QDialog):
             self.combo_city.addItem(c)
         if current_city in cities:
             self.combo_city.setCurrentText(current_city)
+        else:
+            self.combo_city.setCurrentIndex(0)
+            current_city = ""
 
-        # Обновляем вузы
+        # Вузы
+        filtered_final = [r for r in filtered if (not current_city or r[4] == current_city)]
         current_vuz_id = self.combo_vuz.currentData()
         self.combo_vuz.clear()
         self.combo_vuz.addItem("", userData=None)
-        for codvuz, short_name, _, _, _ in sorted(filtered, key=lambda x: x[1].lower()):
+        selected_vuz_idx = 0
+        for codvuz, short_name, _, _, _ in sorted(filtered_final, key=lambda x: x[1].lower()):
             self.combo_vuz.addItem(short_name, userData=codvuz)
             if codvuz == current_vuz_id:
-                self.combo_vuz.setCurrentIndex(self.combo_vuz.count() - 1)
+                selected_vuz_idx = self.combo_vuz.count() - 1
+        self.combo_vuz.setCurrentIndex(selected_vuz_idx)
 
         self._block_geo_signals(False)
 
     def _on_city_changed(self):
-        """При выборе города подставляем субъект и округ."""
+        """При выборе города подставляем субъект и округ и фильтруем вузы."""
         city = self.combo_city.currentText().strip()
         self._block_geo_signals(True)
 
         if city:
             for r in self.all_vuz:
                 if r[4] == city:
-                    if r[3]:
-                        self.combo_obl.setCurrentText(r[3])
                     if r[2]:
                         self.combo_region.setCurrentText(r[2])
+                    if r[3]:
+                        obls = sorted(list(set(x[3] for x in self.all_vuz if (not r[2] or x[2] == r[2]) and x[3])))
+                        self.combo_obl.clear()
+                        self.combo_obl.addItem("")
+                        for o in obls:
+                            self.combo_obl.addItem(o)
+                        self.combo_obl.setCurrentText(r[3])
                     break
             filtered = [r for r in self.all_vuz if r[4] == city]
         else:
@@ -554,14 +578,16 @@ class FilterDialog(QDialog):
             region = self.combo_region.currentText().strip()
             filtered = [r for r in self.all_vuz if ((not obl or r[3] == obl) and (not region or r[2] == region))]
 
-        # Обновляем вузы
+        # Вузы
         current_vuz_id = self.combo_vuz.currentData()
         self.combo_vuz.clear()
         self.combo_vuz.addItem("", userData=None)
+        selected_vuz_idx = 0
         for codvuz, short_name, _, _, _ in sorted(filtered, key=lambda x: x[1].lower()):
             self.combo_vuz.addItem(short_name, userData=codvuz)
             if codvuz == current_vuz_id:
-                self.combo_vuz.setCurrentIndex(self.combo_vuz.count() - 1)
+                selected_vuz_idx = self.combo_vuz.count() - 1
+        self.combo_vuz.setCurrentIndex(selected_vuz_idx)
 
         self._block_geo_signals(False)
 
@@ -577,8 +603,18 @@ class FilterDialog(QDialog):
                 if r[2]:
                     self.combo_region.setCurrentText(r[2])
                 if r[3]:
+                    obls = sorted(list(set(x[3] for x in self.all_vuz if (not r[2] or x[2] == r[2]) and x[3])))
+                    self.combo_obl.clear()
+                    self.combo_obl.addItem("")
+                    for o in obls:
+                        self.combo_obl.addItem(o)
                     self.combo_obl.setCurrentText(r[3])
                 if r[4]:
+                    cities = sorted(list(set(x[4] for x in self.all_vuz if (not r[3] or x[3] == r[3]) and x[4])))
+                    self.combo_city.clear()
+                    self.combo_city.addItem("")
+                    for c in cities:
+                        self.combo_city.addItem(c)
                     self.combo_city.setCurrentText(r[4])
                 break
         self._block_geo_signals(False)
