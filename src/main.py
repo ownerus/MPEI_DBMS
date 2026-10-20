@@ -834,20 +834,10 @@ class MainWindow(QMainWindow):
     def _on_fin_order(self):
         """Выпуск распоряжения о финансировании."""
         self._switch_section(4)
-        QMessageBox.information(
-            self,
-            "Финансирование",
-            "Модуль «Выпуск распоряжения о финансировании» подготовлен к проведению фактических выплат (ЛР №4)."
-        )
 
     def _on_fin_statement(self):
         """Формирование сводной ведомости выплат."""
         self._switch_section(4)
-        QMessageBox.information(
-            self,
-            "Финансирование",
-            "Модуль «Ведомость выплат по вузам» подготовлен к расчету платежей (ЛР №4)."
-        )
 
     def refresh_current_report(self):
         """Формирование и отрисовка текущего аналитического отчета (ЛР №3)."""
