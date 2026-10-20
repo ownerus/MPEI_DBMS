@@ -252,9 +252,9 @@ class MainWindow(QMainWindow):
         # 4. Меню "Финансирование"
         menu_fin = menubar.addMenu("Финансирование")
         act_fin_ord = menu_fin.addAction("Выпуск распоряжения о финансировании")
-        act_fin_ord.triggered.connect(lambda: self._switch_section(4))
+        act_fin_ord.triggered.connect(self._on_fin_order)
         act_fin_ved = menu_fin.addAction("Ведомость выплат по вузам")
-        act_fin_ved.triggered.connect(lambda: self._switch_section(4))
+        act_fin_ved.triggered.connect(self._on_fin_statement)
 
         # 5. Меню "Справка"
         menu_help = menubar.addMenu("Справка")
@@ -409,26 +409,17 @@ class MainWindow(QMainWindow):
         # Раздел 3: Аналитические отчеты (ЛР №3)
         tab_reports = QWidget()
         layout_reports = QVBoxLayout(tab_reports)
-        layout_reports.setContentsMargins(0, 4, 0, 0)
-        layout_reports.setSpacing(6)
+        layout_reports.setContentsMargins(0, 0, 0, 0)
+        layout_reports.setSpacing(0)
 
-        rep_toolbar = QHBoxLayout()
-        lbl_rep = QLabel("Форма аналитического отчета:")
-        lbl_rep.setStyleSheet("font-weight: 500;")
-
+        # Логический переключатель отчетов для сохранения состояния и совместимости с API
         self.combo_report = QComboBox()
         self.combo_report.addItems([
             "Форма 1: Распределение проектов НИР по конкурсам грантов",
             "Форма 2: Распределение проектов НИР по вузам-исполнителям",
             "Форма 3: Распределение проектов НИР по субъектам РФ",
         ])
-        self.combo_report.setMinimumWidth(420)
         self.combo_report.currentIndexChanged.connect(lambda _: self.refresh_current_report())
-
-        rep_toolbar.addWidget(lbl_rep)
-        rep_toolbar.addWidget(self.combo_report)
-        rep_toolbar.addStretch()
-        layout_reports.addLayout(rep_toolbar)
 
         self.report_table = QTableWidget()
         self.report_table.setAlternatingRowColors(True)
@@ -438,26 +429,8 @@ class MainWindow(QMainWindow):
         layout_reports.addWidget(self.report_table)
         self.stack.addWidget(tab_reports)
 
-        # Раздел 4: Финансирование (подготовка к ЛР №4)
+        # Раздел 4: Финансирование (подготовка к ЛР №4, вид согласно эталону)
         tab_fin = QWidget()
-        layout_fin = QVBoxLayout(tab_fin)
-        layout_fin.setContentsMargins(12, 12, 12, 12)
-        layout_fin.setSpacing(10)
-
-        fin_bar = QHBoxLayout()
-        self.btn_fin_order = QPushButton("Выпуск распоряжения о финансировании")
-        self.btn_fin_order.setStyleSheet("font-weight: 500; padding: 4px 14px;")
-        self.btn_fin_order.clicked.connect(self._on_fin_order)
-
-        self.btn_fin_statement = QPushButton("Ведомость выплат по вузам")
-        self.btn_fin_statement.setStyleSheet("font-weight: 500; padding: 4px 14px;")
-        self.btn_fin_statement.clicked.connect(self._on_fin_statement)
-
-        fin_bar.addWidget(self.btn_fin_order)
-        fin_bar.addWidget(self.btn_fin_statement)
-        fin_bar.addStretch()
-        layout_fin.addLayout(fin_bar)
-        layout_fin.addStretch()
         self.stack.addWidget(tab_fin)
 
         main_layout.addWidget(self.stack)
@@ -523,7 +496,15 @@ class MainWindow(QMainWindow):
             3: "Аналитические отчеты",
             4: "Финансирование",
         }
-        self.lbl_current_section.setText(section_names.get(index, "Раздел"))
+        if index == 3:
+            rep_titles = {
+                0: "Форма 1 (по конкурсам)",
+                1: "Форма 2 (по вузам)",
+                2: "Форма 3 (по регионам)",
+            }
+            self.lbl_current_section.setText(rep_titles.get(self.combo_report.currentIndex(), "Аналитический отчет"))
+        else:
+            self.lbl_current_section.setText(section_names.get(index, "Раздел"))
 
         is_proj = (index == 0)
         is_reports = (index == 3)
@@ -552,8 +533,8 @@ class MainWindow(QMainWindow):
 
     def _switch_to_report(self, form_idx: int):
         """Прямой переход к нужной форме аналитического отчета из меню."""
-        self._switch_section(3)
         self.combo_report.setCurrentIndex(form_idx)
+        self._switch_section(3)
         self.refresh_current_report()
 
     def _update_status(self):
@@ -852,6 +833,7 @@ class MainWindow(QMainWindow):
 
     def _on_fin_order(self):
         """Выпуск распоряжения о финансировании."""
+        self._switch_section(4)
         QMessageBox.information(
             self,
             "Финансирование",
@@ -860,6 +842,7 @@ class MainWindow(QMainWindow):
 
     def _on_fin_statement(self):
         """Формирование сводной ведомости выплат."""
+        self._switch_section(4)
         QMessageBox.information(
             self,
             "Финансирование",
