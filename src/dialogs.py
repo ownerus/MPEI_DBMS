@@ -1,20 +1,20 @@
 import re
 import sqlite3
 from pathlib import Path
-from PyQt6.QtCore import Qt, QRegularExpression
-from PyQt6.QtGui import QIntValidator, QRegularExpressionValidator
+
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIntValidator
 from PyQt6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QFormLayout,
-    QLabel,
-    QLineEdit,
     QComboBox,
-    QTextEdit,
-    QPushButton,
-    QMessageBox,
+    QDialog,
+    QFormLayout,
     QGroupBox,
+    QHBoxLayout,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
 )
 
 
@@ -27,7 +27,6 @@ class GrntiLineEdit(QLineEdit):
         self.textEdited.connect(self._on_text_edited)
 
     def _on_text_edited(self, text: str):
-        # Оставляем только цифры (до 12 цифр для двух кодов ГРНТИ)
         digits = "".join(c for c in text if c.isdigit())[:12]
         formatted = ""
         for i, d in enumerate(digits):
@@ -47,45 +46,40 @@ class GrntiLineEdit(QLineEdit):
 class ProjectDialog(QDialog):
     """Модальное окно добавления / редактирования проекта НИР."""
 
-    def __init__(self, parent=None, mode="add", record_data=None, default_codkon=1, db_path=None):
+    def __init__(self, parent=None, mode="add", record_data=None, db_path=None):
         super().__init__(parent)
         self.mode = mode
         self.record_data = record_data or {}
-        self.default_codkon = default_codkon
         self.suggested_codproj = None
+        self.result_data = None
         self.db_path = db_path or Path(__file__).resolve().parent.parent / "databases" / "grants.db"
 
-        title = "Добавление проекта НИР" if mode == "add" else "Редактирование проекта НИР"
-        self.setWindowTitle(title)
+        self.setWindowTitle("Добавление проекта НИР" if mode == "add" else "Редактирование проекта НИР")
         self.resize(650, 560)
 
-        self._init_ui()
+        self._setup_ui()
         self._load_reference_data()
 
         if self.mode == "edit":
             self._fill_existing_data()
 
-    def _init_ui(self):
+    def _setup_ui(self):
         main_layout = QVBoxLayout(self)
 
-        # 1. Группа "Конкурс и шифр НИР"
+        # 1. Группа "Конкурс и шифр проекта"
         grp_key = QGroupBox("Конкурс и шифр проекта")
         layout_key = QFormLayout(grp_key)
-
         self.combo_konk = QComboBox()
         self.combo_konk.currentIndexChanged.connect(self._on_contest_changed)
-
         self.txt_codproj = QLineEdit()
         self.txt_codproj.setValidator(QIntValidator(1, 999999, self))
-
         layout_key.addRow("Конкурс:", self.combo_konk)
         layout_key.addRow("Код НИР в конкурсе:", self.txt_codproj)
         main_layout.addWidget(grp_key)
 
-        # 2. Группа "Исполнитель (Вуз)"
+        # 2. Группа "Организация-исполнитель"
         grp_vuz = QGroupBox("Организация-исполнитель")
         layout_vuz = QFormLayout(grp_vuz)
-
         self.combo_vuz = QComboBox()
         layout_vuz.addRow("Вуз:", self.combo_vuz)
         main_layout.addWidget(grp_vuz)
@@ -93,39 +87,30 @@ class ProjectDialog(QDialog):
         # 3. Группа "Руководитель НИР"
         grp_leader = QGroupBox("Руководитель НИР")
         layout_leader = QFormLayout(grp_leader)
-
         self.txt_leader_fio = QLineEdit()
         self.txt_leader_fio.setPlaceholderText("Иванов И.И.")
-
         self.txt_leader_post = QLineEdit()
         self.txt_leader_post.setPlaceholderText("Например: профессор")
-
         self.txt_leader_rank = QLineEdit()
         self.txt_leader_rank.setPlaceholderText("Например: доцент")
-
         self.txt_leader_degree = QLineEdit()
         self.txt_leader_degree.setPlaceholderText("Например: д.т.н.")
-
         layout_leader.addRow("Ф.И.О. руководителя:", self.txt_leader_fio)
         layout_leader.addRow("Должность:", self.txt_leader_post)
         layout_leader.addRow("Ученое звание:", self.txt_leader_rank)
         layout_leader.addRow("Ученая степень:", self.txt_leader_degree)
         main_layout.addWidget(grp_leader)
 
-        # 4. Группа "Тематика и финансирование"
+        # 4. Группа "Сведения о проекте"
         grp_details = QGroupBox("Сведения о проекте")
         layout_details = QFormLayout(grp_details)
-
         self.txt_proj_name = QTextEdit()
         self.txt_proj_name.setMaximumHeight(70)
         self.txt_proj_name.setPlaceholderText("Наименование темы исследования")
-
         self.txt_grnti = GrntiLineEdit()
-
         self.txt_plan_fin = QLineEdit()
         self.txt_plan_fin.setValidator(QIntValidator(0, 1000000000, self))
         self.txt_plan_fin.setPlaceholderText("Целое число")
-
         layout_details.addRow("Тема НИР:", self.txt_proj_name)
         layout_details.addRow("Рубрикатор ГРНТИ:", self.txt_grnti)
         layout_details.addRow("План финансирования:", self.txt_plan_fin)
@@ -134,14 +119,11 @@ class ProjectDialog(QDialog):
         # Кнопки диалога
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
-
         self.btn_save = QPushButton("Сохранить")
         self.btn_save.setStyleSheet("font-weight: bold; padding: 6px 16px;")
         self.btn_save.clicked.connect(self._on_save)
-
         self.btn_cancel = QPushButton("Отмена")
         self.btn_cancel.clicked.connect(self.reject)
-
         btn_layout.addWidget(self.btn_save)
         btn_layout.addWidget(self.btn_cancel)
         main_layout.addLayout(btn_layout)
@@ -151,10 +133,9 @@ class ProjectDialog(QDialog):
         conn = sqlite3.connect(self.db_path)
         cur = conn.cursor()
 
-        # 1. Конкурсы
+        # Конкурсы
         self.combo_konk.blockSignals(True)
         self.combo_konk.clear()
-
         cur.execute("SELECT codkon, konk_name FROM gr_konk ORDER BY codkon")
         contests = cur.fetchall()
 
@@ -172,10 +153,9 @@ class ProjectDialog(QDialog):
 
         self.combo_konk.blockSignals(False)
 
-        # 2. Вузы (по дефолту пустой выбор)
+        # Вузы (по дефолту пустой выбор)
         self.combo_vuz.clear()
         self.combo_vuz.addItem("", userData=(None, ""))
-
         cur.execute("SELECT codvuz, vuz_short_name, vuz_name FROM vuz ORDER BY vuz_short_name")
         for codvuz, short_name, full_name in cur.fetchall():
             label = f"{short_name} — {full_name}" if full_name else short_name
@@ -184,7 +164,7 @@ class ProjectDialog(QDialog):
         conn.close()
 
     def _on_contest_changed(self, index: int):
-        """При выборе конкурса предлагаем следующий порядковый номер (MAX + 1)."""
+        """При выборе конкурса рассчитываем следующий порядковый номер (MAX + 1)."""
         codkon = self.combo_konk.currentData()
         if not codkon:
             self.suggested_codproj = None
@@ -238,7 +218,7 @@ class ProjectDialog(QDialog):
         self.txt_plan_fin.setText(str(data.get("plan_fin", 0)))
 
     def _on_save(self):
-        """Проверка введенных данных и сохранение."""
+        """Проверка введенных данных и подтверждение сохранения."""
         codkon = self.combo_konk.currentData()
         if not codkon:
             QMessageBox.warning(self, "Ошибка ввода", "Пожалуйста, выберите конкурс из списка.")
@@ -317,7 +297,6 @@ class ProjectDialog(QDialog):
             return
         plan_fin = int(plan_fin_text)
 
-        # Собираем итоговые проверенные данные
         self.result_data = {
             "codkon": codkon,
             "codproj": codproj,
@@ -331,12 +310,11 @@ class ProjectDialog(QDialog):
             "grnti_code": grnti,
             "plan_fin": plan_fin,
         }
-
         self.accept()
 
 
 class FilterDialog(QDialog):
-    """Модальное окно сложной фильтрации: Географический фильтр + Фильтр по конкурсу."""
+    """Модальное окно сложной фильтрации: Конкурс + География."""
 
     def __init__(self, parent=None, current_filters=None, db_path=None):
         super().__init__(parent)
@@ -344,14 +322,16 @@ class FilterDialog(QDialog):
         self.current_filters = current_filters or {}
         self.filter_where = ""
         self.filter_summary = ""
+        self.saved_filter_state = {}
+        self.all_vuz = []
 
         self.setWindowTitle("Фильтрация проектов НИР")
         self.resize(550, 420)
 
-        self._init_ui()
+        self._setup_ui()
         self._load_data()
 
-    def _init_ui(self):
+    def _setup_ui(self):
         main_layout = QVBoxLayout(self)
 
         # 1. Фильтр по конкурсу
@@ -361,10 +341,9 @@ class FilterDialog(QDialog):
         layout_konk.addRow("Конкурс:", self.combo_konk)
         main_layout.addWidget(grp_konk)
 
-        # 2. Географический фильтр (иерархический: Округ -> Субъект -> Город -> Вуз)
+        # 2. Географический фильтр
         grp_geo = QGroupBox("Географический фильтр (по вузам)")
         layout_geo = QFormLayout(grp_geo)
-
         self.combo_region = QComboBox()
         self.combo_obl = QComboBox()
         self.combo_city = QComboBox()
@@ -383,14 +362,11 @@ class FilterDialog(QDialog):
 
         # Кнопки
         btn_layout = QHBoxLayout()
-
         self.btn_reset = QPushButton("Снять фильтр")
         self.btn_reset.clicked.connect(self._on_reset)
-
         self.btn_apply = QPushButton("Применить")
         self.btn_apply.setStyleSheet("font-weight: bold; padding: 6px 14px;")
         self.btn_apply.clicked.connect(self._on_apply)
-
         self.btn_cancel = QPushButton("Отмена")
         self.btn_cancel.clicked.connect(self.reject)
 
@@ -401,54 +377,47 @@ class FilterDialog(QDialog):
         main_layout.addLayout(btn_layout)
 
     def _load_data(self):
-        """Первоначальная загрузка всех справочных данных."""
+        """Загрузка конкурсов и базы вузов."""
         conn = sqlite3.connect(self.db_path)
         cur = conn.cursor()
 
-        # Конкурсы (первый элемент - пустой выбор)
         self.combo_konk.clear()
         self.combo_konk.addItem("", userData=None)
         cur.execute("SELECT codkon, konk_name FROM gr_konk ORDER BY codkon")
         for ck, name in cur.fetchall():
             self.combo_konk.addItem(f"{ck}: {name}", userData=ck)
 
-        # Загрузка базы вузов для каскадной фильтрации
         cur.execute("SELECT codvuz, vuz_short_name, region, obl_name, city FROM vuz ORDER BY vuz_short_name")
         self.all_vuz = cur.fetchall()
         conn.close()
 
         self._populate_geo_combos()
 
-        # Восстановление текущих выбранных фильтров, если они переданы
         if self.current_filters:
             self._restore_current_filters()
 
     def _populate_geo_combos(self):
-        """Заполнение географических комбобоксов с пустым дефолтным выбором."""
+        """Заполнение списков географического фильтра."""
         self._block_geo_signals(True)
 
-        # 1. Округа
         regions = sorted(list(set(r[2] for r in self.all_vuz if r[2])))
         self.combo_region.clear()
         self.combo_region.addItem("")
         for reg in regions:
             self.combo_region.addItem(reg)
 
-        # 2. Субъекты
         obls = sorted(list(set(r[3] for r in self.all_vuz if r[3])))
         self.combo_obl.clear()
         self.combo_obl.addItem("")
         for obl in obls:
             self.combo_obl.addItem(obl)
 
-        # 3. Города
         cities = sorted(list(set(r[4] for r in self.all_vuz if r[4])))
         self.combo_city.clear()
         self.combo_city.addItem("")
         for c in cities:
             self.combo_city.addItem(c)
 
-        # 4. Вузы
         self.combo_vuz.clear()
         self.combo_vuz.addItem("", userData=None)
         for codvuz, short_name, _, _, _ in sorted(self.all_vuz, key=lambda x: x[1].lower()):
@@ -463,13 +432,12 @@ class FilterDialog(QDialog):
         self.combo_vuz.blockSignals(block)
 
     def _on_region_changed(self):
-        """При выборе округа строго фильтруем нижележащие списки: субъекты, города, вузы."""
+        """Каскад при выборе округа: сужение субъектов, городов, вузов."""
         region = self.combo_region.currentText().strip()
         self._block_geo_signals(True)
 
         filtered = [r for r in self.all_vuz if (not region or r[2] == region)]
 
-        # 1. Субъекты (строго только входящие в выбранный округ)
         current_obl = self.combo_obl.currentText().strip()
         obls = sorted(list(set(r[3] for r in filtered if r[3])))
         self.combo_obl.clear()
@@ -482,7 +450,6 @@ class FilterDialog(QDialog):
             self.combo_obl.setCurrentIndex(0)
             current_obl = ""
 
-        # 2. Города (строго из отфильтрованных вузов)
         filtered_sub = [r for r in filtered if (not current_obl or r[3] == current_obl)]
         current_city = self.combo_city.currentText().strip()
         cities = sorted(list(set(r[4] for r in filtered_sub if r[4])))
@@ -496,7 +463,6 @@ class FilterDialog(QDialog):
             self.combo_city.setCurrentIndex(0)
             current_city = ""
 
-        # 3. Вузы
         filtered_final = [r for r in filtered_sub if (not current_city or r[4] == current_city)]
         current_vuz_id = self.combo_vuz.currentData()
         self.combo_vuz.clear()
@@ -511,12 +477,11 @@ class FilterDialog(QDialog):
         self._block_geo_signals(False)
 
     def _on_obl_changed(self):
-        """При выборе субъекта подставляем округ и строго фильтруем города/вузы."""
+        """Каскад при выборе субъекта: автовыбор округа и сужение городов/вузов."""
         obl = self.combo_obl.currentText().strip()
         self._block_geo_signals(True)
 
         if obl:
-            # Находим округ для выбранного субъекта и выставляем его
             for r in self.all_vuz:
                 if r[3] == obl and r[2]:
                     self.combo_region.setCurrentText(r[2])
@@ -527,7 +492,6 @@ class FilterDialog(QDialog):
             region = self.combo_region.currentText().strip()
             filtered = [r for r in self.all_vuz if (not region or r[2] == region)]
 
-        # Города
         current_city = self.combo_city.currentText().strip()
         cities = sorted(list(set(r[4] for r in filtered if r[4])))
         self.combo_city.clear()
@@ -540,7 +504,6 @@ class FilterDialog(QDialog):
             self.combo_city.setCurrentIndex(0)
             current_city = ""
 
-        # Вузы
         filtered_final = [r for r in filtered if (not current_city or r[4] == current_city)]
         current_vuz_id = self.combo_vuz.currentData()
         self.combo_vuz.clear()
@@ -555,7 +518,7 @@ class FilterDialog(QDialog):
         self._block_geo_signals(False)
 
     def _on_city_changed(self):
-        """При выборе города подставляем субъект и округ и фильтруем вузы."""
+        """Каскад при выборе города: автовыбор субъекта/округа и сужение вузов."""
         city = self.combo_city.currentText().strip()
         self._block_geo_signals(True)
 
@@ -578,7 +541,6 @@ class FilterDialog(QDialog):
             region = self.combo_region.currentText().strip()
             filtered = [r for r in self.all_vuz if ((not obl or r[3] == obl) and (not region or r[2] == region))]
 
-        # Вузы
         current_vuz_id = self.combo_vuz.currentData()
         self.combo_vuz.clear()
         self.combo_vuz.addItem("", userData=None)
@@ -592,7 +554,7 @@ class FilterDialog(QDialog):
         self._block_geo_signals(False)
 
     def _on_vuz_changed(self):
-        """При выборе вуза автоматически выставляем его город, субъект и округ."""
+        """Каскад при выборе вуза: автовыбор города, субъекта и округа."""
         codvuz = self.combo_vuz.currentData()
         if not codvuz:
             return
@@ -657,13 +619,11 @@ class FilterDialog(QDialog):
         clauses = []
         labels = []
 
-        # 1. Конкурс
         codkon = self.combo_konk.currentData()
         if codkon:
             clauses.append(f"codkon = {codkon}")
             labels.append(f"Конкурс №{codkon}")
 
-        # 2. География
         codvuz = self.combo_vuz.currentData()
         city = self.combo_city.currentText().strip()
         obl = self.combo_obl.currentText().strip()
@@ -699,5 +659,4 @@ class FilterDialog(QDialog):
             "obl_name": obl,
             "region": region,
         }
-
         self.accept()

@@ -3,7 +3,6 @@
 НИУ «МЭИ», Кафедра УИТ, Дисциплина «СУБД», Вариант №7.
 """
 
-import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
