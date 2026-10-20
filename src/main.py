@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QTableView,
     QTableWidget,
     QTableWidgetItem,
-    QTabWidget,
+    QStackedWidget,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -103,8 +103,8 @@ class MainWindow(QMainWindow):
         self._init_statusbar()
         self._init_ui()
 
-        # Первоначальная загрузка данных первой вкладки
-        self._on_tab_changed(0)
+        # Первоначальная загрузка первого раздела
+        self._switch_section(0)
 
     def _init_models(self):
         """Инициализация моделей таблиц БД."""
@@ -255,7 +255,7 @@ class MainWindow(QMainWindow):
         ])
 
     def _init_menu(self):
-        """Создание главного меню (без дублирования элементов тулбара и вкладок)."""
+        """Создание главного меню."""
         menubar = self.menuBar()
 
         # 1. Меню "Файл"
@@ -264,7 +264,21 @@ class MainWindow(QMainWindow):
         menu_file.addSeparator()
         menu_file.addAction(self.act_exit)
 
-        # 2. Меню "Анализ" (прямой переход к аналитическим отчетам ЛР №3)
+        # 2. Меню "Данные" (выбор таблицы БД)
+        menu_data = menubar.addMenu("Данные")
+        act_proj = menu_data.addAction("Проекты НИР")
+        act_proj.setShortcut("Ctrl+1")
+        act_proj.triggered.connect(lambda: self._switch_section(0))
+
+        act_konk = menu_data.addAction("Конкурсы грантов")
+        act_konk.setShortcut("Ctrl+2")
+        act_konk.triggered.connect(lambda: self._switch_section(1))
+
+        act_vuz = menu_data.addAction("Справочник вузов")
+        act_vuz.setShortcut("Ctrl+3")
+        act_vuz.triggered.connect(lambda: self._switch_section(2))
+
+        # 3. Меню "Анализ" (прямой переход к аналитическим отчетам ЛР №3)
         menu_analysis = menubar.addMenu("Анализ")
         act_rep1 = menu_analysis.addAction("Форма 1: Распределение по конкурсам")
         act_rep1.triggered.connect(lambda: self._switch_to_report(0))
@@ -275,23 +289,39 @@ class MainWindow(QMainWindow):
         act_rep3 = menu_analysis.addAction("Форма 3: Распределение по субъектам РФ")
         act_rep3.triggered.connect(lambda: self._switch_to_report(2))
 
-        # 3. Меню "Финансирование"
+        # 4. Меню "Финансирование"
         menu_fin = menubar.addMenu("Финансирование")
         act_fin_ord = menu_fin.addAction("Выпуск распоряжения о финансировании")
-        act_fin_ord.triggered.connect(lambda: self.tabs.setCurrentIndex(4))
+        act_fin_ord.triggered.connect(lambda: self._switch_section(4))
         act_fin_ved = menu_fin.addAction("Ведомость выплат по вузам")
-        act_fin_ved.triggered.connect(lambda: self.tabs.setCurrentIndex(4))
+        act_fin_ved.triggered.connect(lambda: self._switch_section(4))
 
-        # 4. Меню "Справка"
+        # 5. Меню "Справка"
         menu_help = menubar.addMenu("Справка")
         menu_help.addAction(self.act_about)
 
     def _init_toolbar(self):
-        """Создание стандартной панели инструментов Windows (Toolbar)."""
+        """Создание панели инструментов с едиными кнопками и окошком текущего раздела."""
         self.toolbar = QToolBar("Панель инструментов", self)
         self.toolbar.setMovable(False)
         self.toolbar.setFloatable(False)
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolbar)
+
+        # Компактное окошко-индикатор текущего раздела
+        self.lbl_current_section = QLabel("Проекты НИР")
+        self.lbl_current_section.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_current_section.setStyleSheet("""
+            QLabel {
+                font-size: 13px;
+                font-weight: 600;
+                padding: 6px 14px;
+                border: 1px solid rgba(128, 128, 128, 0.45);
+                border-radius: 4px;
+                background-color: rgba(128, 128, 128, 0.15);
+            }
+        """)
+        self.toolbar.addWidget(self.lbl_current_section)
+        self.toolbar.addSeparator()
 
         self.toolbar.addAction(self.act_add)
         self.toolbar.addAction(self.act_edit)
@@ -305,22 +335,49 @@ class MainWindow(QMainWindow):
         self.toolbar.addAction(self.act_save_as)
         self.toolbar.addAction(self.act_refresh)
 
+        # Единый увеличенный стиль кнопок
+        self.toolbar.setStyleSheet("""
+            QToolBar {
+                spacing: 6px;
+                padding: 4px 6px;
+                border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+            }
+            QToolButton {
+                font-size: 13px;
+                padding: 6px 14px;
+                border: 1px solid rgba(128, 128, 128, 0.35);
+                border-radius: 4px;
+                background-color: rgba(128, 128, 128, 0.08);
+            }
+            QToolButton:hover {
+                background-color: rgba(128, 128, 128, 0.22);
+                border-color: rgba(128, 128, 128, 0.6);
+            }
+            QToolButton:pressed {
+                background-color: rgba(128, 128, 128, 0.35);
+            }
+            QToolButton:disabled {
+                color: rgba(128, 128, 128, 0.4);
+                border-color: rgba(128, 128, 128, 0.15);
+                background-color: transparent;
+            }
+        """)
+
     def _init_ui(self):
-        """Построение центральной рабочей области с вкладками разделов."""
+        """Построение центральной рабочей области с переключением разделов."""
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(6, 4, 6, 4)
         main_layout.setSpacing(4)
 
-        # Стандартные вкладки Windows (QTabWidget)
-        self.tabs = QTabWidget()
-        self.tabs.setDocumentMode(True)
+        # Центральная рабочая область с переключением разделов (без отдельной строки вкладок)
+        self.stack = QStackedWidget()
 
-        # Вкладка 0: Проекты НИР по грантам
+        # Раздел 0: Проекты НИР по грантам
         tab_proj = QWidget()
         layout_proj = QVBoxLayout(tab_proj)
-        layout_proj.setContentsMargins(0, 4, 0, 0)
+        layout_proj.setContentsMargins(0, 0, 0, 0)
         self.table_proj = QTableView()
         self.table_proj.setModel(self.model_proj)
         self.table_proj.setSortingEnabled(True)
@@ -329,33 +386,33 @@ class MainWindow(QMainWindow):
         self.table_proj.hideColumn(0)  # Скрываем суррогатный id
         self.table_proj.doubleClicked.connect(lambda _: self._on_edit_record())
         layout_proj.addWidget(self.table_proj)
-        self.tabs.addTab(tab_proj, "Проекты НИР")
+        self.stack.addWidget(tab_proj)
 
-        # Вкладка 1: Конкурсы грантов
+        # Раздел 1: Конкурсы грантов
         tab_konk = QWidget()
         layout_konk = QVBoxLayout(tab_konk)
-        layout_konk.setContentsMargins(0, 4, 0, 0)
+        layout_konk.setContentsMargins(0, 0, 0, 0)
         self.table_konk = QTableView()
         self.table_konk.setModel(self.model_konk)
         self.table_konk.setSortingEnabled(True)
         self.table_konk.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
         self.table_konk.setSelectionMode(QTableView.SelectionMode.SingleSelection)
         layout_konk.addWidget(self.table_konk)
-        self.tabs.addTab(tab_konk, "Конкурсы грантов")
+        self.stack.addWidget(tab_konk)
 
-        # Вкладка 2: Справочник вузов
+        # Раздел 2: Справочник вузов
         tab_vuz = QWidget()
         layout_vuz = QVBoxLayout(tab_vuz)
-        layout_vuz.setContentsMargins(0, 4, 0, 0)
+        layout_vuz.setContentsMargins(0, 0, 0, 0)
         self.table_vuz = QTableView()
         self.table_vuz.setModel(self.model_vuz)
         self.table_vuz.setSortingEnabled(True)
         self.table_vuz.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
         self.table_vuz.setSelectionMode(QTableView.SelectionMode.SingleSelection)
         layout_vuz.addWidget(self.table_vuz)
-        self.tabs.addTab(tab_vuz, "Справочник вузов")
+        self.stack.addWidget(tab_vuz)
 
-        # Вкладка 3: Аналитические отчеты (ЛР №3)
+        # Раздел 3: Аналитические отчеты (ЛР №3)
         tab_reports = QWidget()
         layout_reports = QVBoxLayout(tab_reports)
         layout_reports.setContentsMargins(0, 4, 0, 0)
@@ -386,12 +443,12 @@ class MainWindow(QMainWindow):
         self.report_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         layout_reports.addWidget(self.report_table)
 
-        self.tabs.addTab(tab_reports, "Аналитические отчеты")
+        self.stack.addWidget(tab_reports)
 
-        # Вкладка 4: Финансирование
+        # Раздел 4: Финансирование
         tab_fin = QWidget()
         layout_fin = QVBoxLayout(tab_fin)
-        layout_fin.setContentsMargins(0, 4, 0, 0)
+        layout_fin.setContentsMargins(0, 0, 0, 0)
         self.lbl_finance_stub = QLabel(
             "Раздел «Финансирование»\n\n"
             "Функции раздела:\n"
@@ -402,10 +459,9 @@ class MainWindow(QMainWindow):
         self.lbl_finance_stub.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_finance_stub.setStyleSheet("font-size: 14px; color: #555; background: #fafafa; border: 1px dashed #ccc;")
         layout_fin.addWidget(self.lbl_finance_stub)
-        self.tabs.addTab(tab_fin, "Финансирование")
+        self.stack.addWidget(tab_fin)
 
-        main_layout.addWidget(self.tabs)
-        self.tabs.currentChanged.connect(self._on_tab_changed)
+        main_layout.addWidget(self.stack)
 
         # Первичная настройка размеров столбцов
         self._adjust_table_columns(self.table_proj, self.model_proj, "gr_proj")
@@ -445,8 +501,19 @@ class MainWindow(QMainWindow):
 
             table_view.setColumnWidth(col, target_width)
 
-    def _on_tab_changed(self, index: int):
-        """Переключение контекста при смене вкладки."""
+    def _switch_section(self, index: int):
+        """Переключение активного раздела системы."""
+        self.stack.setCurrentIndex(index)
+
+        section_names = {
+            0: "Проекты НИР",
+            1: "Конкурсы грантов",
+            2: "Справочник вузов",
+            3: "Аналитические отчеты",
+            4: "Финансирование",
+        }
+        self.lbl_current_section.setText(section_names.get(index, "Раздел"))
+
         is_proj = (index == 0)
         is_reports = (index == 3)
         has_filter = bool(self.current_filter_where)
@@ -477,7 +544,7 @@ class MainWindow(QMainWindow):
 
     def _switch_to_report(self, form_idx: int):
         """Прямой переход к нужной форме аналитического отчета из меню."""
-        self.tabs.setCurrentIndex(3)
+        self._switch_section(3)
         self.combo_report.setCurrentIndex(form_idx)
         self.refresh_current_report()
 
@@ -485,7 +552,7 @@ class MainWindow(QMainWindow):
         """Обновление строки состояния для таблицы проектов НИР."""
         if not hasattr(self, "status_bar"):
             return
-        if self.tabs.currentIndex() != 0:
+        if self.stack.currentIndex() != 0:
             return
         count = self.model_proj.rowCount()
         if self.current_filter_where:
@@ -495,7 +562,7 @@ class MainWindow(QMainWindow):
 
     def _sort_by_key(self):
         """Сортировка проектов по первичному составному ключу (Конкурс + Код НИР)."""
-        if self.tabs.currentIndex() != 0:
+        if self.stack.currentIndex() != 0:
             return
         self.model_proj.setCustomOrder("codkon ASC, codproj ASC")
         while self.model_proj.canFetchMore():
@@ -504,7 +571,7 @@ class MainWindow(QMainWindow):
 
     def _on_add_record(self):
         """Добавление нового проекта НИР."""
-        if self.tabs.currentIndex() != 0:
+        if self.stack.currentIndex() != 0:
             return
 
         default_codkon = 1
@@ -562,7 +629,7 @@ class MainWindow(QMainWindow):
 
     def _on_edit_record(self):
         """Редактирование выделенного проекта НИР."""
-        if self.tabs.currentIndex() != 0:
+        if self.stack.currentIndex() != 0:
             return
 
         selection = self.table_proj.selectionModel().selectedRows()
@@ -653,7 +720,7 @@ class MainWindow(QMainWindow):
 
     def _on_delete_record(self):
         """Удаление строго одной выделенной записи с подтверждением."""
-        if self.tabs.currentIndex() != 0:
+        if self.stack.currentIndex() != 0:
             return
 
         selection = self.table_proj.selectionModel().selectedRows()
@@ -720,7 +787,7 @@ class MainWindow(QMainWindow):
             self.act_clear_filter.setVisible(has_flt)
             self.act_clear_filter.setEnabled(has_flt)
 
-            if self.tabs.currentIndex() == 3:
+            if self.stack.currentIndex() == 3:
                 self.refresh_current_report()
             else:
                 self._update_status()
@@ -739,14 +806,14 @@ class MainWindow(QMainWindow):
         self.act_clear_filter.setVisible(False)
         self.act_clear_filter.setEnabled(False)
 
-        if self.tabs.currentIndex() == 3:
+        if self.stack.currentIndex() == 3:
             self.refresh_current_report()
         else:
             self._update_status()
 
     def _on_refresh(self):
         """Обновление данных активной вкладки (F5)."""
-        idx = self.tabs.currentIndex()
+        idx = self.stack.currentIndex()
         if idx == 0:
             self.model_proj.select()
             while self.model_proj.canFetchMore():
@@ -777,6 +844,14 @@ class MainWindow(QMainWindow):
 
         self.current_report_data = report_data
         self.render_report(report_data)
+
+        if hasattr(self, "lbl_current_section") and self.stack.currentIndex() == 3:
+            report_titles = {
+                0: "Отчет: по конкурсам",
+                1: "Отчет: по вузам",
+                2: "Отчет: по регионам",
+            }
+            self.lbl_current_section.setText(report_titles.get(form_idx, "Аналитические отчеты"))
 
     def render_report(self, report_data: dict):
         """Отрисовка отчета в self.report_table."""
@@ -856,7 +931,7 @@ class MainWindow(QMainWindow):
 
     def _on_save_as(self):
         """Универсальный экспорт активного документа (Ctrl+S)."""
-        tab_idx = self.tabs.currentIndex()
+        tab_idx = self.stack.currentIndex()
 
         if tab_idx == 3:  # Аналитические отчеты
             if not self.current_report_data:
