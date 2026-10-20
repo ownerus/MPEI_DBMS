@@ -301,7 +301,7 @@ class MainWindow(QMainWindow):
         menu_help.addAction(self.act_about)
 
     def _init_toolbar(self):
-        """Создание панели инструментов с едиными кнопками и окошком текущего раздела."""
+        """Создание компактной панели инструментов с красивыми, строго отцентрированными кнопками."""
         self.toolbar = QToolBar("Панель инструментов", self)
         self.toolbar.setMovable(False)
         self.toolbar.setFloatable(False)
@@ -310,53 +310,91 @@ class MainWindow(QMainWindow):
         # Компактное окошко-индикатор текущего раздела
         self.lbl_current_section = QLabel("Проекты НИР")
         self.lbl_current_section.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_current_section.setStyleSheet("""
+        self.toolbar.addWidget(self.lbl_current_section)
+        self.toolbar.addSeparator()
+
+        # Кнопки панели управления (QPushButton со строгим центрированием текста)
+        self.btn_add = QPushButton("Добавить")
+        self.btn_add.setToolTip("Добавить новый проект НИР (Insert)")
+        self.btn_add.clicked.connect(self._on_add_record)
+        self.toolbar.addWidget(self.btn_add)
+
+        self.btn_edit = QPushButton("Изменить")
+        self.btn_edit.setToolTip("Редактировать выделенный проект НИР (F4)")
+        self.btn_edit.clicked.connect(self._on_edit_record)
+        self.toolbar.addWidget(self.btn_edit)
+
+        self.btn_delete = QPushButton("Удалить")
+        self.btn_delete.setToolTip("Удалить выделенный проект НИР (Delete)")
+        self.btn_delete.clicked.connect(self._on_delete_record)
+        self.toolbar.addWidget(self.btn_delete)
+
+        self.toolbar.addSeparator()
+
+        self.btn_key_sort = QPushButton("Сортировка по ключу")
+        self.btn_key_sort.setToolTip("Упорядочить по первичному составному ключу (Ctrl+K)")
+        self.btn_key_sort.clicked.connect(self._sort_by_key)
+        self.toolbar.addWidget(self.btn_key_sort)
+
+        self.toolbar.addSeparator()
+
+        self.btn_filter = QPushButton("Фильтр")
+        self.btn_filter.setToolTip("Открыть окно фильтрации (Ctrl+F)")
+        self.btn_filter.clicked.connect(self._on_filter)
+        self.toolbar.addWidget(self.btn_filter)
+
+        self.btn_clear_filter = QPushButton("Снять фильтр")
+        self.btn_clear_filter.setToolTip("Сбросить активный фильтр (Ctrl+Shift+F)")
+        self.btn_clear_filter.setVisible(False)
+        self.btn_clear_filter.clicked.connect(self._on_clear_filter)
+        self.toolbar.addWidget(self.btn_clear_filter)
+
+        self.toolbar.addSeparator()
+
+        self.btn_save_as = QPushButton("Сохранить как...")
+        self.btn_save_as.setToolTip("Экспорт документа в Excel, HTML, CSV, TXT (Ctrl+S)")
+        self.btn_save_as.clicked.connect(self._on_save_as)
+        self.toolbar.addWidget(self.btn_save_as)
+
+        self.btn_refresh = QPushButton("Обновить")
+        self.btn_refresh.setToolTip("Обновить данные активного экрана (F5)")
+        self.btn_refresh.clicked.connect(self._on_refresh)
+        self.toolbar.addWidget(self.btn_refresh)
+
+        # Аккуратный, компактный стиль для всех кнопок и индикатора
+        self.toolbar.setStyleSheet("""
+            QToolBar {
+                spacing: 6px;
+                padding: 3px 6px;
+                border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+            }
             QLabel {
-                font-size: 13px;
+                font-family: Segoe UI, sans-serif;
+                font-size: 12px;
                 font-weight: 600;
-                padding: 6px 14px;
+                padding: 3px 12px;
+                height: 22px;
                 border: 1px solid rgba(128, 128, 128, 0.45);
                 border-radius: 4px;
                 background-color: rgba(128, 128, 128, 0.15);
             }
-        """)
-        self.toolbar.addWidget(self.lbl_current_section)
-        self.toolbar.addSeparator()
-
-        self.toolbar.addAction(self.act_add)
-        self.toolbar.addAction(self.act_edit)
-        self.toolbar.addAction(self.act_delete)
-        self.toolbar.addSeparator()
-        self.toolbar.addAction(self.act_key_sort)
-        self.toolbar.addSeparator()
-        self.toolbar.addAction(self.act_filter)
-        self.toolbar.addAction(self.act_clear_filter)
-        self.toolbar.addSeparator()
-        self.toolbar.addAction(self.act_save_as)
-        self.toolbar.addAction(self.act_refresh)
-
-        # Единый увеличенный стиль кнопок
-        self.toolbar.setStyleSheet("""
-            QToolBar {
-                spacing: 6px;
-                padding: 4px 6px;
-                border-bottom: 1px solid rgba(128, 128, 128, 0.25);
-            }
-            QToolButton {
-                font-size: 13px;
-                padding: 6px 14px;
+            QPushButton {
+                font-family: Segoe UI, sans-serif;
+                font-size: 12px;
+                padding: 3px 12px;
+                height: 22px;
                 border: 1px solid rgba(128, 128, 128, 0.35);
                 border-radius: 4px;
                 background-color: rgba(128, 128, 128, 0.08);
             }
-            QToolButton:hover {
+            QPushButton:hover {
                 background-color: rgba(128, 128, 128, 0.22);
                 border-color: rgba(128, 128, 128, 0.6);
             }
-            QToolButton:pressed {
+            QPushButton:pressed {
                 background-color: rgba(128, 128, 128, 0.35);
             }
-            QToolButton:disabled {
+            QPushButton:disabled {
                 color: rgba(128, 128, 128, 0.4);
                 border-color: rgba(128, 128, 128, 0.15);
                 background-color: transparent;
@@ -519,12 +557,19 @@ class MainWindow(QMainWindow):
         has_filter = bool(self.current_filter_where)
 
         # Контекстная доступность действий на панели инструментов
+        if hasattr(self, "btn_add"):
+            self.btn_add.setEnabled(is_proj)
+            self.btn_edit.setEnabled(is_proj)
+            self.btn_delete.setEnabled(is_proj)
+            self.btn_key_sort.setEnabled(is_proj)
+            self.btn_filter.setEnabled(is_proj or is_reports)
+            self.btn_clear_filter.setVisible(has_filter)
+            self.btn_clear_filter.setEnabled(has_filter)
+
         self.act_add.setEnabled(is_proj)
         self.act_edit.setEnabled(is_proj)
         self.act_delete.setEnabled(is_proj)
         self.act_key_sort.setEnabled(is_proj)
-
-        # Фильтр применим к проектам НИР и к аналитическим отчетам
         self.act_filter.setEnabled(is_proj or is_reports)
         self.act_clear_filter.setVisible(has_filter)
         self.act_clear_filter.setEnabled(has_filter)
@@ -784,6 +829,9 @@ class MainWindow(QMainWindow):
                 self.model_proj.fetchMore()
 
             has_flt = bool(self.current_filter_where)
+            if hasattr(self, "btn_clear_filter"):
+                self.btn_clear_filter.setVisible(has_flt)
+                self.btn_clear_filter.setEnabled(has_flt)
             self.act_clear_filter.setVisible(has_flt)
             self.act_clear_filter.setEnabled(has_flt)
 
@@ -803,6 +851,9 @@ class MainWindow(QMainWindow):
         while self.model_proj.canFetchMore():
             self.model_proj.fetchMore()
 
+        if hasattr(self, "btn_clear_filter"):
+            self.btn_clear_filter.setVisible(False)
+            self.btn_clear_filter.setEnabled(False)
         self.act_clear_filter.setVisible(False)
         self.act_clear_filter.setEnabled(False)
 
