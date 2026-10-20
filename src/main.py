@@ -176,43 +176,51 @@ class MainWindow(QMainWindow):
         # Файл
         self.act_save_as = QAction("Сохранить как...", self)
         self.act_save_as.setShortcut(QKeySequence.StandardKey.Save)
+        self.act_save_as.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
         self.act_save_as.setStatusTip("Экспорт открытой таблицы или аналитического отчета в файл (Excel, HTML, CSV, TXT)")
         self.act_save_as.triggered.connect(self._on_save_as)
 
         self.act_exit = QAction("Выход", self)
         self.act_exit.setShortcut("Ctrl+Q")
+        self.act_exit.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
         self.act_exit.setStatusTip("Завершение работы с программой")
         self.act_exit.triggered.connect(self.close)
 
-        # Правка (CRUD)
+        # Действия над данными (CRUD)
         self.act_add = QAction("Добавить", self)
         self.act_add.setShortcut(QKeySequence("Insert"))
+        self.act_add.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
         self.act_add.setStatusTip("Добавить новый проект НИР (Insert)")
         self.act_add.triggered.connect(self._on_add_record)
 
         self.act_edit = QAction("Изменить", self)
         self.act_edit.setShortcut(QKeySequence("F4"))
+        self.act_edit.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
         self.act_edit.setStatusTip("Редактировать выделенный проект НИР (F4)")
         self.act_edit.triggered.connect(self._on_edit_record)
 
         self.act_delete = QAction("Удалить", self)
         self.act_delete.setShortcut(QKeySequence.StandardKey.Delete)
+        self.act_delete.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
         self.act_delete.setStatusTip("Удалить выделенный проект НИР (Delete)")
         self.act_delete.triggered.connect(self._on_delete_record)
 
         self.act_key_sort = QAction("Сортировка по ключу", self)
         self.act_key_sort.setShortcut(QKeySequence("Ctrl+K"))
+        self.act_key_sort.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
         self.act_key_sort.setStatusTip("Упорядочить по первичному составному ключу (Конкурс + Код НИР)")
         self.act_key_sort.triggered.connect(self._sort_by_key)
 
         # Фильтр
         self.act_filter = QAction("Фильтр", self)
         self.act_filter.setShortcut(QKeySequence.StandardKey.Find)
+        self.act_filter.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
         self.act_filter.setStatusTip("Открыть окно расширенной фильтрации (Ctrl+F)")
         self.act_filter.triggered.connect(self._on_filter)
 
         self.act_clear_filter = QAction("Снять фильтр", self)
         self.act_clear_filter.setShortcut(QKeySequence("Ctrl+Shift+F"))
+        self.act_clear_filter.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
         self.act_clear_filter.setStatusTip("Сбросить активный фильтр и показать все записи")
         self.act_clear_filter.setVisible(False)
         self.act_clear_filter.setEnabled(False)
@@ -221,17 +229,33 @@ class MainWindow(QMainWindow):
         # Обновить
         self.act_refresh = QAction("Обновить", self)
         self.act_refresh.setShortcut(QKeySequence.StandardKey.Refresh)
+        self.act_refresh.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
         self.act_refresh.setStatusTip("Обновить данные активного экрана (F5)")
         self.act_refresh.triggered.connect(self._on_refresh)
 
         # О программе
         self.act_about = QAction("О программе", self)
         self.act_about.setShortcut(QKeySequence.StandardKey.HelpContents)
+        self.act_about.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
         self.act_about.setStatusTip("Сведения о программе, дисциплине и авторах (F1)")
         self.act_about.triggered.connect(self._show_about)
 
+        # Регистрируем все действия на уровне главного окна для надежной работы горячих клавиш
+        self.addActions([
+            self.act_save_as,
+            self.act_exit,
+            self.act_add,
+            self.act_edit,
+            self.act_delete,
+            self.act_key_sort,
+            self.act_filter,
+            self.act_clear_filter,
+            self.act_refresh,
+            self.act_about,
+        ])
+
     def _init_menu(self):
-        """Создание стандартного главного меню Windows-приложения."""
+        """Создание главного меню (без дублирования элементов тулбара и вкладок)."""
         menubar = self.menuBar()
 
         # 1. Меню "Файл"
@@ -240,40 +264,7 @@ class MainWindow(QMainWindow):
         menu_file.addSeparator()
         menu_file.addAction(self.act_exit)
 
-        # 2. Меню "Правка"
-        menu_edit = menubar.addMenu("Правка")
-        menu_edit.addAction(self.act_add)
-        menu_edit.addAction(self.act_edit)
-        menu_edit.addAction(self.act_delete)
-        menu_edit.addSeparator()
-        menu_edit.addAction(self.act_key_sort)
-
-        # 3. Меню "Вид" (быстрый переход к разделам)
-        menu_view = menubar.addMenu("Вид")
-        act_v_proj = menu_view.addAction("Проекты НИР")
-        act_v_proj.setShortcut("Ctrl+1")
-        act_v_proj.triggered.connect(lambda: self.tabs.setCurrentIndex(0))
-
-        act_v_konk = menu_view.addAction("Конкурсы грантов")
-        act_v_konk.setShortcut("Ctrl+2")
-        act_v_konk.triggered.connect(lambda: self.tabs.setCurrentIndex(1))
-
-        act_v_vuz = menu_view.addAction("Справочник вузов")
-        act_v_vuz.setShortcut("Ctrl+3")
-        act_v_vuz.triggered.connect(lambda: self.tabs.setCurrentIndex(2))
-
-        act_v_rep = menu_view.addAction("Аналитические отчеты")
-        act_v_rep.setShortcut("Ctrl+4")
-        act_v_rep.triggered.connect(lambda: self.tabs.setCurrentIndex(3))
-
-        act_v_fin = menu_view.addAction("Финансирование")
-        act_v_fin.setShortcut("Ctrl+5")
-        act_v_fin.triggered.connect(lambda: self.tabs.setCurrentIndex(4))
-
-        menu_view.addSeparator()
-        menu_view.addAction(self.act_refresh)
-
-        # 4. Меню "Анализ" (прямой переход к формам ЛР №3)
+        # 2. Меню "Анализ" (прямой переход к аналитическим отчетам ЛР №3)
         menu_analysis = menubar.addMenu("Анализ")
         act_rep1 = menu_analysis.addAction("Форма 1: Распределение по конкурсам")
         act_rep1.triggered.connect(lambda: self._switch_to_report(0))
@@ -284,19 +275,14 @@ class MainWindow(QMainWindow):
         act_rep3 = menu_analysis.addAction("Форма 3: Распределение по субъектам РФ")
         act_rep3.triggered.connect(lambda: self._switch_to_report(2))
 
-        # 5. Меню "Фильтр"
-        menu_filter = menubar.addMenu("Фильтр")
-        menu_filter.addAction(self.act_filter)
-        menu_filter.addAction(self.act_clear_filter)
-
-        # 6. Меню "Финансирование"
+        # 3. Меню "Финансирование"
         menu_fin = menubar.addMenu("Финансирование")
         act_fin_ord = menu_fin.addAction("Выпуск распоряжения о финансировании")
         act_fin_ord.triggered.connect(lambda: self.tabs.setCurrentIndex(4))
         act_fin_ved = menu_fin.addAction("Ведомость выплат по вузам")
         act_fin_ved.triggered.connect(lambda: self.tabs.setCurrentIndex(4))
 
-        # 7. Меню "Справка"
+        # 4. Меню "Справка"
         menu_help = menubar.addMenu("Справка")
         menu_help.addAction(self.act_about)
 
