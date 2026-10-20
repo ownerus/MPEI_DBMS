@@ -29,21 +29,35 @@ def build_contest_report(db_path: Path, filter_where: str = ""):
 
     where_sql = f"WHERE {filter_where}" if filter_where else ""
 
-    query = f"""
-    WITH filtered_proj AS (
-        SELECT * FROM gr_proj {where_sql}
-    )
-    SELECT 
-        k.codkon,
-        k.konk_name,
-        COUNT(p.id) AS nir_count,
-        COALESCE(SUM(p.plan_fin), 0) AS total_plan,
-        COUNT(DISTINCT p.codvuz) AS vuz_count
-    FROM gr_konk k
-    JOIN filtered_proj p ON k.codkon = p.codkon
-    GROUP BY k.codkon, k.konk_name
-    ORDER BY k.codkon
-    """
+    if not filter_where:
+        query = """
+        SELECT 
+            k.codkon,
+            k.konk_name,
+            COUNT(p.id) AS nir_count,
+            COALESCE(SUM(p.plan_fin), 0) AS total_plan,
+            COUNT(DISTINCT p.codvuz) AS vuz_count
+        FROM gr_konk k
+        LEFT JOIN gr_proj p ON k.codkon = p.codkon
+        GROUP BY k.codkon, k.konk_name
+        ORDER BY k.codkon
+        """
+    else:
+        query = f"""
+        WITH filtered_proj AS (
+            SELECT * FROM gr_proj WHERE {filter_where}
+        )
+        SELECT 
+            k.codkon,
+            k.konk_name,
+            COUNT(p.id) AS nir_count,
+            COALESCE(SUM(p.plan_fin), 0) AS total_plan,
+            COUNT(DISTINCT p.codvuz) AS vuz_count
+        FROM gr_konk k
+        JOIN filtered_proj p ON k.codkon = p.codkon
+        GROUP BY k.codkon, k.konk_name
+        ORDER BY k.codkon
+        """
     cur.execute(query)
     raw_rows = cur.fetchall()
 

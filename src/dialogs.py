@@ -674,8 +674,13 @@ class FilterDialog(QDialog):
             labels.append(f"Вуз: {self.combo_vuz.currentText()}")
         elif city:
             safe_city = city.replace("'", "''")
-            clauses.append(f"codvuz IN (SELECT codvuz FROM vuz WHERE city = '{safe_city}')")
-            labels.append(f"Город: {city}")
+            if obl:
+                safe_obl = obl.replace("'", "''")
+                clauses.append(f"codvuz IN (SELECT codvuz FROM vuz WHERE city = '{safe_city}' AND obl_name = '{safe_obl}')")
+                labels.append(f"Город: {city} ({obl})")
+            else:
+                clauses.append(f"codvuz IN (SELECT codvuz FROM vuz WHERE city = '{safe_city}')")
+                labels.append(f"Город: {city}")
         elif obl:
             safe_obl = obl.replace("'", "''")
             clauses.append(f"codvuz IN (SELECT codvuz FROM vuz WHERE obl_name = '{safe_obl}')")

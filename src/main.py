@@ -609,6 +609,7 @@ class MainWindow(QMainWindow):
         """Сортировка проектов по первичному составному ключу (Конкурс + Код НИР)."""
         if self.stack.currentIndex() != 0:
             return
+        self.table_proj.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
         self.model_proj.setCustomOrder("codkon ASC, codproj ASC")
         while self.model_proj.canFetchMore():
             self.model_proj.fetchMore()
@@ -1025,6 +1026,8 @@ class MainWindow(QMainWindow):
                 return
 
             try:
+                while model.canFetchMore():
+                    model.fetchMore()
                 visible_cols = [c for c in range(model.columnCount()) if not table_view.isColumnHidden(c)]
                 headers = [str(model.headerData(c, Qt.Orientation.Horizontal) or f"Колонка {c}") for c in visible_cols]
 
