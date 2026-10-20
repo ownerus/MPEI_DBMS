@@ -66,7 +66,7 @@ class MainWindow(QMainWindow):
     """
     Главное окно приложения для сопровождения конкурсов грантов (Вариант 7).
     Построено по классической настольной структуре Windows / Qt Designer:
-    - Главное меню: Файл, Данные, Анализ, Справка
+    - Главное меню: Файл, Данные, Анализ, Финансирование, Справка
     - Панель инструментов со стандартными действиями
     - Центральная область переключения разделов (QStackedWidget)
     - Строка состояния (Status Bar)
@@ -259,7 +259,14 @@ class MainWindow(QMainWindow):
         act_rep3 = menu_analysis.addAction("Форма 3: Распределение по субъектам РФ")
         act_rep3.triggered.connect(lambda: self._switch_to_report(2))
 
-        # 4. Меню "Справка"
+        # 4. Меню "Финансирование"
+        menu_fin = menubar.addMenu("Финансирование")
+        act_fin_ord = menu_fin.addAction("Выпуск распоряжения о финансировании")
+        act_fin_ord.triggered.connect(lambda: self._switch_section(4))
+        act_fin_ved = menu_fin.addAction("Ведомость выплат по вузам")
+        act_fin_ved.triggered.connect(lambda: self._switch_section(4))
+
+        # 5. Меню "Справка"
         menu_help = menubar.addMenu("Справка")
         menu_help.addAction(self.act_about)
 
@@ -439,8 +446,43 @@ class MainWindow(QMainWindow):
         self.report_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.report_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         layout_reports.addWidget(self.report_table)
-
         self.stack.addWidget(tab_reports)
+
+        # Раздел 4: Финансирование (подготовка к ЛР №4)
+        tab_fin = QWidget()
+        layout_fin = QVBoxLayout(tab_fin)
+        layout_fin.setContentsMargins(12, 12, 12, 12)
+        layout_fin.setSpacing(10)
+
+        fin_bar = QHBoxLayout()
+        self.btn_fin_order = QPushButton("Выпуск распоряжения о финансировании")
+        self.btn_fin_order.setStyleSheet("font-weight: 500; padding: 4px 14px;")
+        self.btn_fin_order.clicked.connect(self._on_fin_order)
+
+        self.btn_fin_statement = QPushButton("Ведомость выплат по вузам")
+        self.btn_fin_statement.setStyleSheet("font-weight: 500; padding: 4px 14px;")
+        self.btn_fin_statement.clicked.connect(self._on_fin_statement)
+
+        fin_bar.addWidget(self.btn_fin_order)
+        fin_bar.addWidget(self.btn_fin_statement)
+        fin_bar.addStretch()
+        layout_fin.addLayout(fin_bar)
+
+        self.lbl_fin_info = QLabel(
+            "Раздел «Финансирование проектов НИР»\n\n"
+            "Запланированные модули:\n"
+            "• Выпуск распоряжения: проведение фактического финансирования и распределение средств по кварталам\n"
+            "• Сводная ведомость: расчет перечислений средств по вузам-исполнителям\n\n"
+            "Модуль подготовлен к реализации алгоритмов ЛР №4."
+        )
+        self.lbl_fin_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_fin_info.setStyleSheet(
+            "font-size: 13px; color: #24292f; line-height: 1.6; "
+            "background-color: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 24px;"
+        )
+        layout_fin.addWidget(self.lbl_fin_info)
+        self.stack.addWidget(tab_fin)
+
         main_layout.addWidget(self.stack)
 
         self._adjust_table_columns(self.table_proj, self.model_proj, "gr_proj")
@@ -489,6 +531,7 @@ class MainWindow(QMainWindow):
             1: "Конкурсы грантов",
             2: "Справочник вузов",
             3: "Аналитические отчеты",
+            4: "Финансирование",
         }
         self.lbl_current_section.setText(section_names.get(index, "Раздел"))
 
@@ -520,6 +563,8 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(f"Справочник вузов: {self.model_vuz.rowCount()} записей")
         elif index == 3:
             self.refresh_current_report()
+        elif index == 4:
+            self.status_bar.showMessage("Раздел: Финансирование проектов НИР")
 
     def _switch_to_report(self, form_idx: int):
         """Прямой переход к нужной форме аналитического отчета из меню."""
@@ -586,7 +631,6 @@ class MainWindow(QMainWindow):
                 self.model_proj.fetchMore()
             self.model_konk.select()
 
-            # Автофокус на добавленную запись
             for r in range(self.model_proj.rowCount()):
                 rec = self.model_proj.record(r)
                 if rec.value("codkon") == d["codkon"] and rec.value("codproj") == d["codproj"]:
@@ -800,6 +844,24 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(f"Справочник вузов: {self.model_vuz.rowCount()} записей")
         elif idx == 3:
             self.refresh_current_report()
+        elif idx == 4:
+            self.status_bar.showMessage("Раздел: Финансирование проектов НИР")
+
+    def _on_fin_order(self):
+        """Выпуск распоряжения о финансировании."""
+        QMessageBox.information(
+            self,
+            "Финансирование",
+            "Модуль «Выпуск распоряжения о финансировании» подготовлен к проведению фактических выплат (ЛР №4)."
+        )
+
+    def _on_fin_statement(self):
+        """Формирование сводной ведомости выплат."""
+        QMessageBox.information(
+            self,
+            "Финансирование",
+            "Модуль «Ведомость выплат по вузам» подготовлен к расчету платежей (ЛР №4)."
+        )
 
     def refresh_current_report(self):
         """Формирование и отрисовка текущего аналитического отчета (ЛР №3)."""
@@ -921,7 +983,7 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка сохранения", f"Не удалось сохранить отчет:\n{e}")
 
-        else:  # Таблицы БД (0: gr_proj, 1: gr_konk, 2: vuz)
+        elif tab_idx in (0, 1, 2):  # Таблицы БД (0: gr_proj, 1: gr_konk, 2: vuz)
             info = {
                 0: (self.model_proj, self.table_proj, "gr_proj", "Проекты НИР по грантам"),
                 1: (self.model_konk, self.table_konk, "gr_konk", "Конкурсы грантов"),
@@ -979,6 +1041,8 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Экспорт завершен", f"Данные таблицы «{title}» успешно сохранены:\n{file_path}")
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка сохранения", f"Не удалось сохранить таблицу:\n{e}")
+        else:
+            QMessageBox.information(self, "Сохранить как...", "В данном разделе пока нет открытых документов для сохранения.")
 
     def _show_about(self):
         """Диалоговое окно «О программе»."""
