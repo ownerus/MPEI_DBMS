@@ -161,54 +161,44 @@ class MainWindow(QMainWindow):
         """Создание стандартных действий (Actions) для меню и горячих клавиш."""
         self.act_save_as = QAction("Сохранить как...", self)
         self.act_save_as.setShortcut(QKeySequence.StandardKey.Save)
-        self.act_save_as.setStatusTip("Экспорт открытой таблицы или аналитического отчета в файл (Excel, HTML, CSV, TXT)")
         self.act_save_as.triggered.connect(self._on_save_as)
 
         self.act_exit = QAction("Выход", self)
         self.act_exit.setShortcut("Ctrl+Q")
-        self.act_exit.setStatusTip("Завершение работы с программой")
         self.act_exit.triggered.connect(self.close)
 
         self.act_add = QAction("Добавить", self)
         self.act_add.setShortcut(QKeySequence("Insert"))
-        self.act_add.setStatusTip("Добавить новый проект НИР (Insert)")
         self.act_add.triggered.connect(self._on_add_record)
 
         self.act_edit = QAction("Изменить", self)
         self.act_edit.setShortcut(QKeySequence("F4"))
-        self.act_edit.setStatusTip("Редактировать выделенный проект НИР (F4)")
         self.act_edit.triggered.connect(self._on_edit_record)
 
         self.act_delete = QAction("Удалить", self)
         self.act_delete.setShortcut(QKeySequence.StandardKey.Delete)
-        self.act_delete.setStatusTip("Удалить выделенный проект НИР (Delete)")
         self.act_delete.triggered.connect(self._on_delete_record)
 
         self.act_key_sort = QAction("Сортировка по ключу", self)
         self.act_key_sort.setShortcut(QKeySequence("Ctrl+K"))
-        self.act_key_sort.setStatusTip("Упорядочить по первичному составному ключу (Конкурс + Код НИР)")
         self.act_key_sort.triggered.connect(self._sort_by_key)
 
         self.act_filter = QAction("Фильтр", self)
         self.act_filter.setShortcut(QKeySequence.StandardKey.Find)
-        self.act_filter.setStatusTip("Открыть окно расширенной фильтрации (Ctrl+F)")
         self.act_filter.triggered.connect(self._on_filter)
 
         self.act_clear_filter = QAction("Снять фильтр", self)
         self.act_clear_filter.setShortcut(QKeySequence("Ctrl+Shift+F"))
-        self.act_clear_filter.setStatusTip("Сбросить активный фильтр и показать все записи")
         self.act_clear_filter.setVisible(False)
         self.act_clear_filter.setEnabled(False)
         self.act_clear_filter.triggered.connect(self._on_clear_filter)
 
         self.act_refresh = QAction("Обновить", self)
         self.act_refresh.setShortcut(QKeySequence.StandardKey.Refresh)
-        self.act_refresh.setStatusTip("Обновить данные активного экрана (F5)")
         self.act_refresh.triggered.connect(self._on_refresh)
 
         self.act_about = QAction("О программе", self)
         self.act_about.setShortcut(QKeySequence.StandardKey.HelpContents)
-        self.act_about.setStatusTip("Сведения о программе, дисциплине и авторах (F1)")
         self.act_about.triggered.connect(self._show_about)
 
         self.addActions([
@@ -481,9 +471,22 @@ class MainWindow(QMainWindow):
         self.status_bar = QStatusBar(self)
         self.setStatusBar(self.status_bar)
 
+        # Закрепленная надпись текущего состояния активного раздела (слева)
+        self.lbl_status = QLabel("")
+        self.lbl_status.setStyleSheet("font-size: 12px; padding-left: 4px;")
+        self.status_bar.addWidget(self.lbl_status, 1)
+
+        # Постоянный индикатор БД (справа)
         self.lbl_db_info = QLabel("БД: grants.db (SQLite)")
         self.lbl_db_info.setStyleSheet("color: #666; padding-right: 10px;")
         self.status_bar.addPermanentWidget(self.lbl_db_info)
+
+        self.status_bar.messageChanged.connect(self._on_status_message_changed)
+
+    def _on_status_message_changed(self, msg: str):
+        """Автоматическое восстановление закрепленного текста при попытке его очистки."""
+        if not msg and hasattr(self, "lbl_status") and self.lbl_status.text():
+            self.status_bar.showMessage(self.lbl_status.text())
 
     def _adjust_table_columns(self, table_view: QTableView, model: QSqlTableModel, table_name: str):
         """Оптимальная подгонка ширины столбцов под заголовки и контент."""
@@ -542,16 +545,10 @@ class MainWindow(QMainWindow):
         self.act_clear_filter.setVisible(has_filter)
         self.act_clear_filter.setEnabled(has_filter)
 
-        if index == 0:
-            self._update_status()
-        elif index == 1:
-            self.status_bar.showMessage(f"Конкурсы грантов: {self.model_konk.rowCount()} записей")
-        elif index == 2:
-            self.status_bar.showMessage(f"Справочник вузов: {self.model_vuz.rowCount()} записей")
-        elif index == 3:
+        if index == 3:
             self.refresh_current_report()
-        elif index == 4:
-            self.status_bar.showMessage("Раздел: Финансирование проектов НИР")
+        else:
+            self._update_status()
 
     def _switch_to_report(self, form_idx: int):
         """Прямой переход к нужной форме аналитического отчета из меню."""
@@ -560,14 +557,36 @@ class MainWindow(QMainWindow):
         self.refresh_current_report()
 
     def _update_status(self):
-        """Обновление строки состояния для таблицы проектов НИР."""
-        if self.stack.currentIndex() != 0:
-            return
-        count = self.model_proj.rowCount()
-        if self.current_filter_where:
-            self.status_bar.showMessage(f"Проекты НИР: {count} записей (фильтр: {self.current_filter_summary})")
+        """Обновление закрепленной строки состояния для активного раздела системы."""
+        idx = self.stack.currentIndex()
+        if idx == 0:
+            count = self.model_proj.rowCount()
+            if self.current_filter_where:
+                msg = f"Проекты НИР: {count} записей (фильтр: {self.current_filter_summary})"
+            else:
+                msg = f"Проекты НИР: всего {count} записей (полная база)"
+        elif idx == 1:
+            msg = f"Конкурсы грантов: всего {self.model_konk.rowCount()} записей"
+        elif idx == 2:
+            msg = f"Справочник вузов: всего {self.model_vuz.rowCount()} записей"
+        elif idx == 3:
+            titles = {
+                0: "по конкурсам",
+                1: "по вузам",
+                2: "по субъектам РФ",
+            }
+            rep_name = titles.get(self.combo_report.currentIndex(), "отчет")
+            rows_cnt = max(0, self.report_table.rowCount() - 1) if self.report_table.rowCount() > 0 else 0
+            flt = f"фильтр: {self.current_filter_summary}" if self.current_filter_where else "полная база"
+            msg = f"Аналитические отчеты ({rep_name}): {rows_cnt} строк ({flt})"
+        elif idx == 4:
+            msg = "Финансирование: раздел подготовлен к выполнению ЛР №4"
         else:
-            self.status_bar.showMessage(f"Проекты НИР: всего {count} записей (полная база)")
+            msg = ""
+
+        if hasattr(self, "lbl_status"):
+            self.lbl_status.setText(msg)
+        self.status_bar.showMessage(msg)
 
     def _sort_by_key(self):
         """Сортировка проектов по первичному составному ключу (Конкурс + Код НИР)."""
@@ -812,27 +831,24 @@ class MainWindow(QMainWindow):
             self._update_status()
 
     def _on_refresh(self):
-        """Обновление данных активной вкладки (F5)."""
+        """Обновление данных активного раздела (F5)."""
         idx = self.stack.currentIndex()
         if idx == 0:
             self.model_proj.select()
             while self.model_proj.canFetchMore():
                 self.model_proj.fetchMore()
-            self._update_status()
         elif idx == 1:
             self.model_konk.select()
             while self.model_konk.canFetchMore():
                 self.model_konk.fetchMore()
-            self.status_bar.showMessage(f"Конкурсы грантов: {self.model_konk.rowCount()} записей")
         elif idx == 2:
             self.model_vuz.select()
             while self.model_vuz.canFetchMore():
                 self.model_vuz.fetchMore()
-            self.status_bar.showMessage(f"Справочник вузов: {self.model_vuz.rowCount()} записей")
         elif idx == 3:
             self.refresh_current_report()
-        elif idx == 4:
-            self.status_bar.showMessage("Раздел: Финансирование проектов НИР")
+            return
+        self._update_status()
 
     def _on_fin_order(self):
         """Выпуск распоряжения о финансировании."""
@@ -941,8 +957,7 @@ class MainWindow(QMainWindow):
             c_width = self.report_table.columnWidth(col)
             self.report_table.setColumnWidth(col, max(h_width, c_width, 90))
 
-        filter_str = f"фильтр: {self.current_filter_summary}" if self.current_filter_where else "полная база данных"
-        self.status_bar.showMessage(f"Аналитический отчет сформирован: {len(rows)} строк ({filter_str})")
+        self._update_status()
 
     def _on_save_as(self):
         """Универсальный экспорт активного документа (Ctrl+S)."""
