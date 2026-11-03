@@ -210,7 +210,7 @@ class FinanceWidget(QWidget):
         main_layout.setSpacing(6)
 
         # 1. Справочный блок исходного состояния базы данных
-        group_summary = QGroupBox("Текущее состояние финансирования (исходные данные БД)")
+        group_summary = QGroupBox("Текущее состояние финансирования")
         group_summary.setStyleSheet("""
             QGroupBox {
                 font-weight: 600;
@@ -273,11 +273,10 @@ class FinanceWidget(QWidget):
 
         layout_params.addWidget(QLabel("Сумма к распределению (руб.):"))
         self.edit_sum = QLineEdit()
-        self.edit_sum.setPlaceholderText("Например: 50317500")
         self.edit_sum.setMaximumWidth(160)
         layout_params.addWidget(self.edit_sum)
 
-        layout_params.addWidget(QLabel("ИЛИ Процент от плана (%):"))
+        layout_params.addWidget(QLabel("Процент от плана (%):"))
         self.spin_pct = QDoubleSpinBox()
         self.spin_pct.setRange(0.01, 100.0)
         self.spin_pct.setDecimals(2)
@@ -344,11 +343,6 @@ class FinanceWidget(QWidget):
         # 4. Нижняя панель действий документа
         layout_bottom = QHBoxLayout()
         layout_bottom.setContentsMargins(4, 4, 4, 4)
-
-        self.lbl_calc_status = QLabel("Задайте параметры распоряжения и нажмите «Рассчитать» для формирования ведомости выплат.")
-        self.lbl_calc_status.setStyleSheet("color: #888; font-size: 12px;")
-        layout_bottom.addWidget(self.lbl_calc_status)
-
         layout_bottom.addStretch()
 
         self.btn_save_doc = QPushButton("Сохранить документ...")
@@ -424,9 +418,7 @@ class FinanceWidget(QWidget):
 
         self._render_vedomost(calc)
 
-        self.lbl_calc_status.setText(
-            f"Проект распоряжения на {quarter}-й квартал: выделено {calc['total_distributed']:,} руб. ({pct:.2f}% от плана) по {calc['total_proj_count']} НИР.".replace(",", " ")
-        )
+
         self.btn_save_doc.setEnabled(True)
         self.btn_approve.setEnabled(True)
 
@@ -503,7 +495,7 @@ class FinanceWidget(QWidget):
         self.spin_pct.setValue(25.0)
         self._sync_sum_from_percent(25.0)
         self.combo_quarter.setCurrentIndex(0)
-        self.lbl_calc_status.setText("Расчет отменен. Задайте параметры и нажмите «Рассчитать».")
+
         self.btn_save_doc.setEnabled(False)
         self.btn_approve.setEnabled(False)
 
@@ -619,9 +611,7 @@ class FinanceWidget(QWidget):
             self.data_updated.emit()
 
             self.btn_approve.setEnabled(False)
-            self.lbl_calc_status.setText(
-                f"Распоряжение на {q}-й квартал ({total_dist:,} руб.) успешно УТВЕРЖДЕНО и проведено в БД!".replace(",", " ")
-            )
+
 
             # Предложение сохранить официальный утвержденный документ
             exp_reply = QMessageBox.question(

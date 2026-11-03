@@ -298,7 +298,7 @@ def export_report_to_file(file_path: str, report_data: dict, filter_summary: str
     money_cols = set(report_data.get("money_cols", []))
     numeric_cols = set(report_data.get("numeric_cols", []))
 
-    filter_desc = filter_summary if filter_summary else "не установлены (полная база данных)"
+    filter_desc = filter_summary if filter_summary else "не установлены"
     now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
 
     if ext == ".xlsx":
