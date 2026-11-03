@@ -256,9 +256,8 @@ class MainWindow(QMainWindow):
         # 4. Меню "Финансирование"
         menu_fin = menubar.addMenu("Финансирование")
         act_fin_ord = menu_fin.addAction("Выпуск распоряжения о финансировании")
+        act_fin_ord.setShortcut("Ctrl+4")
         act_fin_ord.triggered.connect(self._on_fin_order)
-        act_fin_ved = menu_fin.addAction("Ведомость выплат по вузам")
-        act_fin_ved.triggered.connect(self._on_fin_statement)
 
         # 5. Меню "Справка"
         menu_help = menubar.addMenu("Справка")
@@ -780,11 +779,7 @@ class MainWindow(QMainWindow):
             self._update_status()
 
     def _on_fin_order(self):
-        """Выпуск распоряжения о финансировании."""
-        self._switch_section(4)
-
-    def _on_fin_statement(self):
-        """Формирование сводной ведомости выплат."""
+        """Выпуск распоряжения о финансировании (ЛР №4)."""
         self._switch_section(4)
 
     def refresh_current_report(self):
