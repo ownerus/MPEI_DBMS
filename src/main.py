@@ -2,7 +2,7 @@ import sys
 import sqlite3
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QEvent
 from PyQt6.QtGui import QAction, QColor, QFont, QKeySequence
 from PyQt6.QtSql import QSqlDatabase, QSqlTableModel
 from PyQt6.QtWidgets import (
@@ -30,7 +30,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from src.database import DB_PATH, connect_db
+from src.database import DB_PATH, connect_db, sync_contest_aggregates
 from src.dialogs import ProjectDialog, FilterDialog
 from src.reports import (
     build_contest_report,
@@ -92,8 +92,16 @@ class MainWindow(QMainWindow):
 
         self._switch_section(0)
 
+    def event(self, e: QEvent) -> bool:
+        """Подавление очистки строки состояния при наведении на меню/кнопки."""
+        if e.type() == QEvent.Type.StatusTip:
+            return True
+        return super().event(e)
+
     def _init_models(self):
         """Инициализация моделей таблиц БД."""
+        sync_contest_aggregates(DB_PATH)
+
         # 1. Проекты НИР
         self.model_proj = GrantsTableModel(self)
         self.model_proj.setTable("gr_proj")
@@ -442,24 +450,13 @@ class MainWindow(QMainWindow):
     def _init_statusbar(self):
         """Создание стандартной строки состояния Windows."""
         self.status_bar = QStatusBar(self)
+        self.status_bar.setSizeGripEnabled(False)
         self.setStatusBar(self.status_bar)
-
-        # Закрепленная надпись текущего состояния активного раздела (слева)
-        self.lbl_status = QLabel("")
-        self.lbl_status.setStyleSheet("font-size: 12px; padding-left: 4px;")
-        self.status_bar.addWidget(self.lbl_status, 1)
 
         # Постоянный индикатор БД (справа)
         self.lbl_db_info = QLabel("БД: grants.db (SQLite)")
         self.lbl_db_info.setStyleSheet("color: #666; padding-right: 10px;")
         self.status_bar.addPermanentWidget(self.lbl_db_info)
-
-        self.status_bar.messageChanged.connect(self._on_status_message_changed)
-
-    def _on_status_message_changed(self, msg: str):
-        """Автоматическое восстановление закрепленного текста при попытке его очистки."""
-        if not msg and hasattr(self, "lbl_status") and self.lbl_status.text():
-            self.status_bar.showMessage(self.lbl_status.text())
 
     def _adjust_table_columns(self, table_view: QTableView, model: QSqlTableModel, table_name: str):
         """Оптимальная подгонка ширины столбцов под заголовки и контент."""
@@ -565,8 +562,6 @@ class MainWindow(QMainWindow):
         else:
             msg = ""
 
-        if hasattr(self, "lbl_status"):
-            self.lbl_status.setText(msg)
         self.status_bar.showMessage(msg)
 
     def _sort_by_key(self):
@@ -603,20 +598,17 @@ class MainWindow(QMainWindow):
                 d["proj_name"]
             ))
 
-            cur.execute("""
-                UPDATE gr_konk
-                SET projects_count = projects_count + 1,
-                    plan_fin = plan_fin + ?
-                WHERE codkon = ?
-            """, (d["plan_fin"], d["codkon"]))
-
             conn.commit()
             conn.close()
+
+            sync_contest_aggregates(DB_PATH, d["codkon"])
 
             self.model_proj.select()
             while self.model_proj.canFetchMore():
                 self.model_proj.fetchMore()
             self.model_konk.select()
+            while self.model_konk.canFetchMore():
+                self.model_konk.fetchMore()
 
             for r in range(self.model_proj.rowCount()):
                 rec = self.model_proj.record(r)
@@ -677,35 +669,19 @@ class MainWindow(QMainWindow):
                 d["proj_name"], record_data["id"]
             ))
 
-            if old_codkon != new_codkon:
-                cur.execute("""
-                    UPDATE gr_konk
-                    SET projects_count = projects_count - 1,
-                        plan_fin = plan_fin - ?
-                    WHERE codkon = ?
-                """, (old_plan, old_codkon))
-                cur.execute("""
-                    UPDATE gr_konk
-                    SET projects_count = projects_count + 1,
-                        plan_fin = plan_fin + ?
-                    WHERE codkon = ?
-                """, (new_plan, new_codkon))
-            else:
-                plan_diff = new_plan - old_plan
-                if plan_diff != 0:
-                    cur.execute("""
-                        UPDATE gr_konk
-                        SET plan_fin = plan_fin + ?
-                        WHERE codkon = ?
-                    """, (plan_diff, new_codkon))
-
             conn.commit()
             conn.close()
+
+            if old_codkon != new_codkon:
+                sync_contest_aggregates(DB_PATH, old_codkon)
+            sync_contest_aggregates(DB_PATH, new_codkon)
 
             self.model_proj.select()
             while self.model_proj.canFetchMore():
                 self.model_proj.fetchMore()
             self.model_konk.select()
+            while self.model_konk.canFetchMore():
+                self.model_konk.fetchMore()
 
             for r in range(self.model_proj.rowCount()):
                 rec_r = self.model_proj.record(r)
@@ -751,19 +727,17 @@ class MainWindow(QMainWindow):
             conn = sqlite3.connect(DB_PATH)
             cur = conn.cursor()
             cur.execute("DELETE FROM gr_proj WHERE id = ?", (proj_id,))
-            cur.execute("""
-                UPDATE gr_konk
-                SET projects_count = projects_count - 1,
-                    plan_fin = plan_fin - ?
-                WHERE codkon = ?
-            """, (plan_fin, codkon))
             conn.commit()
             conn.close()
+
+            sync_contest_aggregates(DB_PATH, codkon)
 
             self.model_proj.select()
             while self.model_proj.canFetchMore():
                 self.model_proj.fetchMore()
             self.model_konk.select()
+            while self.model_konk.canFetchMore():
+                self.model_konk.fetchMore()
             self._update_status()
 
     def _on_filter(self):
