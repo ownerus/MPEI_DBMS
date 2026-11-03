@@ -39,6 +39,7 @@ from src.reports import (
     export_report_to_file,
     _format_money,
 )
+from src.finance import FinanceWidget
 
 
 class GrantsTableModel(QSqlTableModel):
@@ -201,10 +202,6 @@ class MainWindow(QMainWindow):
         self.act_clear_filter.setEnabled(False)
         self.act_clear_filter.triggered.connect(self._on_clear_filter)
 
-        self.act_refresh = QAction("Обновить", self)
-        self.act_refresh.setShortcut(QKeySequence.StandardKey.Refresh)
-        self.act_refresh.triggered.connect(self._on_refresh)
-
         self.act_about = QAction("О программе", self)
         self.act_about.setShortcut(QKeySequence.StandardKey.HelpContents)
         self.act_about.triggered.connect(self._show_about)
@@ -218,7 +215,6 @@ class MainWindow(QMainWindow):
             self.act_key_sort,
             self.act_filter,
             self.act_clear_filter,
-            self.act_refresh,
             self.act_about,
         ])
 
@@ -315,17 +311,7 @@ class MainWindow(QMainWindow):
         self.btn_clear_filter.clicked.connect(self._on_clear_filter)
         self.toolbar.addWidget(self.btn_clear_filter)
 
-        self.toolbar.addSeparator()
 
-        self.btn_save_as = QPushButton("Сохранить как...")
-        self.btn_save_as.setToolTip("Экспорт документа в Excel, HTML, CSV, TXT (Ctrl+S)")
-        self.btn_save_as.clicked.connect(self._on_save_as)
-        self.toolbar.addWidget(self.btn_save_as)
-
-        self.btn_refresh = QPushButton("Обновить")
-        self.btn_refresh.setToolTip("Обновить данные активного экрана (F5)")
-        self.btn_refresh.clicked.connect(self._on_refresh)
-        self.toolbar.addWidget(self.btn_refresh)
 
         self.toolbar.setStyleSheet("""
             QToolBar {
@@ -437,9 +423,10 @@ class MainWindow(QMainWindow):
         layout_reports.addWidget(self.report_table)
         self.stack.addWidget(tab_reports)
 
-        # Раздел 4: Финансирование (подготовка к ЛР №4, вид согласно эталону)
-        tab_fin = QWidget()
-        self.stack.addWidget(tab_fin)
+        # Раздел 4: Финансирование (ЛР №4)
+        self.finance_widget = FinanceWidget(self)
+        self.finance_widget.data_updated.connect(self._on_finance_data_updated)
+        self.stack.addWidget(self.finance_widget)
 
         main_layout.addWidget(self.stack)
 
@@ -525,6 +512,9 @@ class MainWindow(QMainWindow):
 
         if index == 3:
             self.refresh_current_report()
+        elif index == 4:
+            self.finance_widget.refresh_summary()
+            self._update_status()
         else:
             self._update_status()
 
@@ -558,7 +548,11 @@ class MainWindow(QMainWindow):
             flt = f"фильтр: {self.current_filter_summary}" if self.current_filter_where else "полная база"
             msg = f"Аналитические отчеты ({rep_name}): {rows_cnt} строк ({flt})"
         elif idx == 4:
-            msg = "Финансирование: раздел подготовлен к выполнению ЛР №4"
+            sum_info = getattr(self.finance_widget, "current_summary", {})
+            fact_val = sum_info.get("total_fact", 0)
+            plan_val = sum_info.get("total_plan", 0)
+            pct_val = sum_info.get("fact_pct", 0.0)
+            msg = f"Финансирование проектов НИР: факт {fact_val:,} из {plan_val:,} руб. ({pct_val:.2f}%)".replace(",", " ")
         else:
             msg = ""
 
@@ -785,26 +779,6 @@ class MainWindow(QMainWindow):
         else:
             self._update_status()
 
-    def _on_refresh(self):
-        """Обновление данных активного раздела (F5)."""
-        idx = self.stack.currentIndex()
-        if idx == 0:
-            self.model_proj.select()
-            while self.model_proj.canFetchMore():
-                self.model_proj.fetchMore()
-        elif idx == 1:
-            self.model_konk.select()
-            while self.model_konk.canFetchMore():
-                self.model_konk.fetchMore()
-        elif idx == 2:
-            self.model_vuz.select()
-            while self.model_vuz.canFetchMore():
-                self.model_vuz.fetchMore()
-        elif idx == 3:
-            self.refresh_current_report()
-            return
-        self._update_status()
-
     def _on_fin_order(self):
         """Выпуск распоряжения о финансировании."""
         self._switch_section(4)
@@ -906,6 +880,18 @@ class MainWindow(QMainWindow):
 
         self._update_status()
 
+    def _on_finance_data_updated(self):
+        """Обновление моделей таблиц и отчетов после утверждения финансирования."""
+        self.model_proj.select()
+        while self.model_proj.canFetchMore():
+            self.model_proj.fetchMore()
+        self.model_konk.select()
+        while self.model_konk.canFetchMore():
+            self.model_konk.fetchMore()
+        if self.stack.currentIndex() == 3:
+            self.refresh_current_report()
+        self._update_status()
+
     def _on_save_as(self):
         """Универсальный экспорт активного документа (Ctrl+S)."""
         tab_idx = self.stack.currentIndex()
@@ -931,6 +917,9 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Экспорт завершен", f"Аналитический отчет успешно сохранен в файл:\n{file_path}")
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка сохранения", f"Не удалось сохранить отчет:\n{e}")
+
+        elif tab_idx == 4:  # Финансирование
+            self.finance_widget._on_save_document()
 
         elif tab_idx in (0, 1, 2):  # Таблицы БД (0: gr_proj, 1: gr_konk, 2: vuz)
             info = {
