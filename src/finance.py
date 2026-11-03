@@ -171,6 +171,28 @@ def execute_tranche_in_db(quarter: int, project_tranches: list, db_path: Path = 
     sync_contest_aggregates(target_path)
 
 
+def reset_quarter_funding(quarter: int, db_path: Path = None):
+    """
+    Очистка фактического финансирования выбранного квартала (сброс в 0).
+    Уменьшает fact_fin на сумму выплат этого квартала и синхронизирует таблицу gr_konk.
+    """
+    target_path = str(db_path or DB_PATH)
+    conn = sqlite3.connect(target_path)
+    cur = conn.cursor()
+
+    col_q = f"fin_q{quarter}"
+    cur.execute("BEGIN TRANSACTION")
+    cur.execute(f"""
+        UPDATE gr_proj
+        SET fact_fin = MAX(0, fact_fin - {col_q}),
+            {col_q} = 0
+    """)
+    conn.commit()
+    conn.close()
+
+    sync_contest_aggregates(target_path)
+
+
 class FinanceWidget(QWidget):
     """Экранная форма раздела «Финансирование» (ЛР №4)."""
 
@@ -277,7 +299,14 @@ class FinanceWidget(QWidget):
 
         self.btn_cancel = QPushButton("Отмена")
         self.btn_cancel.setStyleSheet("padding: 4px 12px;")
+        self.btn_cancel.setToolTip("Сбросить текущий предварительный расчет и очистить форму")
         layout_params.addWidget(self.btn_cancel)
+
+        self.btn_reset_quarter = QPushButton("Очистить квартал...")
+        self.btn_reset_quarter.setStyleSheet("padding: 4px 12px; color: #d97768;")
+        self.btn_reset_quarter.setToolTip("Обнулить проведённые выплаты выбранного квартала в базе данных")
+        self.btn_reset_quarter.clicked.connect(self._on_reset_quarter)
+        layout_params.addWidget(self.btn_reset_quarter)
 
         layout_params.addStretch()
         main_layout.addWidget(group_params)
@@ -608,3 +637,45 @@ class FinanceWidget(QWidget):
 
         except Exception as e:
             QMessageBox.critical(self, "Ошибка проведения", f"Сбой при проведении транша в базе данных:\n{e}")
+
+    def _on_reset_quarter(self):
+        """Сброс и обнуление выплат по выбранному кварталу в базе данных."""
+        q = self.combo_quarter.currentIndex() + 1
+        summary = get_finance_summary(DB_PATH)
+        current_q_val = summary.get(f"q{q}", 0)
+
+        if current_q_val == 0:
+            QMessageBox.information(
+                self,
+                "Очистка квартала",
+                f"В {q}-м квартале пока нет проведённых выплат (сумма равна 0 руб.)."
+            )
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Подтверждение очистки квартала",
+            f"Вы действительно хотите обнулить выплаты за {q}-й квартал?\n\n"
+            f"• Текущая сумма выплат: {current_q_val:,} руб.\n\n"
+            f"Данные по {q}-му кварталу будут сброшены в 0, а общий факт финансирования уменьшен.".replace(",", " "),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            reset_quarter_funding(q, DB_PATH)
+            self.refresh_summary()
+            self._on_cancel()
+            self.data_updated.emit()
+            QMessageBox.information(
+                self,
+                "Квартал очищен",
+                f"Финансирование за {q}-й квартал ({current_q_val:,} руб.) успешно сброшено в 0.".replace(",", " ")
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка очистки", f"Не удалось обнулить квартал:\n{e}")
+
+
