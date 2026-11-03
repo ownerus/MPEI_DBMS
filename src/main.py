@@ -531,7 +531,7 @@ class MainWindow(QMainWindow):
             if self.current_filter_where:
                 msg = f"Проекты НИР: {count} записей (фильтр: {self.current_filter_summary})"
             else:
-                msg = f"Проекты НИР: всего {count} записей (полная база)"
+                msg = f"Проекты НИР: всего {count} записей"
         elif idx == 1:
             msg = f"Конкурсы грантов: всего {self.model_konk.rowCount()} записей"
         elif idx == 2:
@@ -544,8 +544,10 @@ class MainWindow(QMainWindow):
             }
             rep_name = titles.get(self.combo_report.currentIndex(), "отчет")
             rows_cnt = max(0, self.report_table.rowCount() - 1) if self.report_table.rowCount() > 0 else 0
-            flt = f"фильтр: {self.current_filter_summary}" if self.current_filter_where else "полная база"
-            msg = f"Аналитические отчеты ({rep_name}): {rows_cnt} строк ({flt})"
+            if self.current_filter_where:
+                msg = f"Аналитические отчеты ({rep_name}): {rows_cnt} строк (фильтр: {self.current_filter_summary})"
+            else:
+                msg = f"Аналитические отчеты ({rep_name}): всего {rows_cnt} строк"
         elif idx == 4:
             sum_info = getattr(self.finance_widget, "current_summary", {})
             fact_val = sum_info.get("total_fact", 0)
