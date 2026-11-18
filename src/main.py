@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QStackedWidget,
+    QTextBrowser,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -261,6 +262,10 @@ class MainWindow(QMainWindow):
 
         # 5. Меню "Справка"
         menu_help = menubar.addMenu("Справка")
+        act_guide = menu_help.addAction("Руководство пользователя")
+        act_guide.setShortcut("F1")
+        act_guide.triggered.connect(self._show_user_guide)
+        menu_help.addSeparator()
         menu_help.addAction(self.act_about)
 
     def _init_toolbar(self):
@@ -978,6 +983,87 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Ошибка сохранения", f"Не удалось сохранить таблицу:\n{e}")
         else:
             QMessageBox.information(self, "Сохранить как...", "В данном разделе пока нет открытых документов для сохранения.")
+
+    def _show_user_guide(self):
+        """Диалоговое окно «Руководство пользователя»."""
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Руководство пользователя — АРМ сопровождения конкурсов грантов")
+        dlg.resize(780, 560)
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(12, 12, 12, 12)
+
+        browser = QTextBrowser(dlg)
+        browser.setOpenExternalLinks(False)
+        browser.setHtml("""
+        <style>
+            body { font-family: 'Segoe UI', sans-serif; font-size: 13px; line-height: 1.5; color: #222; }
+            h2 { color: #1a365d; border-bottom: 2px solid #3182ce; padding-bottom: 4px; margin-top: 16px; }
+            h3 { color: #2c5282; margin-top: 12px; margin-bottom: 6px; }
+            table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+            th, td { border: 1px solid #cbd5e0; padding: 6px 10px; text-align: left; }
+            th { background: #edf2f7; font-weight: bold; }
+            code { background: #edf2f7; padding: 2px 6px; border-radius: 4px; font-family: Consolas, monospace; font-size: 12px; }
+            ul { margin-top: 4px; margin-bottom: 8px; padding-left: 20px; }
+            li { margin-bottom: 4px; }
+        </style>
+        <h2>Руководство пользователя АРМ «Сопровождение конкурсов на соискание грантов»</h2>
+        <p>Автоматизированное рабочее место предназначено для учета, анализа и финансового сопровождения конкурсов грантов (Вариант 7, НИУ «МЭИ»).</p>
+
+        <h3>1. Навигация по разделам системы</h3>
+        <table>
+            <tr><th>Раздел</th><th>Горячая клавиша</th><th>Назначение</th></tr>
+            <tr><td><b>Проекты НИР</b></td><td><code>Ctrl+1</code></td><td>Главный реестр тем НИР с полной информацией по исполнителям и финансированию</td></tr>
+            <tr><td><b>Конкурсы грантов</b></td><td><code>Ctrl+2</code></td><td>Справочник конкурсов и сводные плановые/фактические ассигнования</td></tr>
+            <tr><td><b>Справочник вузов</b></td><td><code>Ctrl+3</code></td><td>Классификатор вузов с географической привязкой (округ, субъект РФ, город)</td></tr>
+            <tr><td><b>Аналитические отчеты</b></td><td><code>—</code></td><td>Формирование и экспорт отчетных форм 1, 2, 3 с учетом фильтрации</td></tr>
+            <tr><td><b>Финансирование</b></td><td><code>Ctrl+4</code></td><td>Выпуск квартальных распоряжений о финансировании и ведомости выплат</td></tr>
+        </table>
+
+        <h3>2. Ведение реестра проектов НИР</h3>
+        <ul>
+            <li><b>Добавление проекта (Insert):</b> открытие карточки добавления. Номер проекта в конкурсе предлагается автоматически. Система проверяет уникальность составного ключа <i>(код конкурса + номер проекта)</i> и корректность кода ГРНТИ.</li>
+            <li><b>Редактирование проекта (F4 или двойной клик):</b> изменение параметров темы, руководителя, ГРНТИ или планового финансирования.</li>
+            <li><b>Удаление проекта (Delete):</b> удаление выбранного проекта с обязательным подтверждением оператора.</li>
+            <li><b>Сортировка по первичному ключу (Ctrl+K):</b> восстановление канонического порядка записей <i>(codkon, codproj)</i>.</li>
+        </ul>
+
+        <h3>3. Многокритериальная фильтрация (Ctrl+F)</h3>
+        <p>Позволяет осуществлять выборку проектов по конкурсу грантов и/или географическому положению организации-исполнителя:</p>
+        <ul>
+            <li>Каскадные списки: выбор <i>Федерального округа</i> ограничивает список <i>Субъектов РФ</i>, выбор субъекта сужает перечень <i>Городов</i> и <i>Вузов</i>.</li>
+            <li>Применение фильтра автоматически пересчитывает показатели строк состояния и обновляет состав аналитических отчетов.</li>
+            <li>Для сброса фильтра нажмите <b>«Снять фильтр»</b> (<code>Ctrl+Shift+F</code>).</li>
+        </ul>
+
+        <h3>4. Аналитические отчеты и экспорт данных</h3>
+        <p>Доступны три формы аналитических сводок:</p>
+        <ul>
+            <li><b>Форма 1:</b> Распределение проектов и финансирования по конкурсам грантов.</li>
+            <li><b>Форма 2:</b> Распределение грантов по вузам-исполнителям.</li>
+            <li><b>Форма 3:</b> Распределение грантов по субъектам Российской Федерации.</li>
+        </ul>
+        <p>Любой отчет и таблицу базы данных можно экспортировать через меню <b>Файл &rarr; Экспорт</b> или кнопку <b>«Экспорт...»</b> в форматы <code>Excel (.xlsx)</code>, <code>HTML (.html)</code>, <code>CSV (.csv)</code> и <code>TXT (.txt)</code>.</p>
+
+        <h3>5. Выпуск распоряжения о финансировании (ЛР №4)</h3>
+        <ul>
+            <li><b>Выбор квартала:</b> укажите целевой период выплат (1, 2, 3 или 4 квартал).</li>
+            <li><b>Задание объема транша:</b> введите необходимую сумму в рублях <i>ИЛИ</i> процент от годового плана. Поля взаимосвязаны и пересчитываются на лету.</li>
+            <li><b>Расчет:</b> по нажатию <b>«Рассчитать»</b> алгоритм пропорционально распределяет средства между вузами-получателями с поправкой на дискретность до копеек и формирует сводную ведомость.</li>
+            <li><b>Сохранение проекта распоряжения:</b> кнопка <b>«Сохранить документ...»</b> позволяет выгрузить проект ведомости до ее утверждения.</li>
+            <li><b>Утверждение распоряжения:</b> кнопка <b>«Утвердить финансирование»</b> фиксирует выплаты в базе данных SQLite в рамках единой транзакции и автоматически синхронизирует агрегаты конкурсов.</li>
+        </ul>
+        """)
+        layout.addWidget(browser)
+
+        btn_box = QHBoxLayout()
+        btn_box.addStretch()
+        btn_close = QPushButton("Закрыть")
+        btn_close.setStyleSheet("padding: 6px 18px; font-weight: bold;")
+        btn_close.clicked.connect(dlg.accept)
+        btn_box.addWidget(btn_close)
+        layout.addLayout(btn_box)
+
+        dlg.exec()
 
     def _show_about(self):
         """Диалоговое окно «О программе»."""

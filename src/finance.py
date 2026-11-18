@@ -278,10 +278,11 @@ class FinanceWidget(QWidget):
 
         layout_params.addWidget(QLabel("Процент от плана (%):"))
         self.spin_pct = QDoubleSpinBox()
-        self.spin_pct.setRange(0.01, 100.0)
+        self.spin_pct.setRange(0.0, 100.0)
         self.spin_pct.setDecimals(2)
-        self.spin_pct.setSingleStep(5.0)
-        self.spin_pct.setValue(25.0)
+        self.spin_pct.setSingleStep(1.0)
+        self.spin_pct.setSpecialValueText(" ")
+        self.spin_pct.setValue(0.0)
         self.spin_pct.setSuffix(" %")
         self.spin_pct.setMaximumWidth(110)
         layout_params.addWidget(self.spin_pct)
@@ -300,12 +301,6 @@ class FinanceWidget(QWidget):
         self.btn_cancel.setStyleSheet("padding: 4px 12px;")
         self.btn_cancel.setToolTip("Сбросить текущий предварительный расчет и очистить форму")
         layout_params.addWidget(self.btn_cancel)
-
-        self.btn_reset_quarter = QPushButton("Очистить квартал...")
-        self.btn_reset_quarter.setStyleSheet("padding: 4px 12px; color: #d97768;")
-        self.btn_reset_quarter.setToolTip("Обнулить проведённые выплаты выбранного квартала в базе данных")
-        self.btn_reset_quarter.clicked.connect(self._on_reset_quarter)
-        layout_params.addWidget(self.btn_reset_quarter)
 
         layout_params.addStretch()
         main_layout.addWidget(group_params)
@@ -380,6 +375,11 @@ class FinanceWidget(QWidget):
 
     def _sync_sum_from_percent(self, pct: float):
         """Расчет суммы по проценту."""
+        if pct <= 0.0:
+            self.edit_sum.blockSignals(True)
+            self.edit_sum.setText("")
+            self.edit_sum.blockSignals(False)
+            return
         total_plan = getattr(self, "current_summary", {}).get("total_plan", 201270000)
         target_sum = int(round(total_plan * (pct / 100.0)))
         self.edit_sum.blockSignals(True)
@@ -393,7 +393,10 @@ class FinanceWidget(QWidget):
     def _on_sum_edited(self, text: str):
         """Пользователь ввел сумму вручную."""
         clean_text = "".join(ch for ch in text if ch.isdigit())
-        if not clean_text:
+        if not clean_text or int(clean_text) <= 0:
+            self.spin_pct.blockSignals(True)
+            self.spin_pct.setValue(0.0)
+            self.spin_pct.blockSignals(False)
             return
         total_plan = getattr(self, "current_summary", {}).get("total_plan", 201270000)
         if total_plan <= 0:
@@ -401,7 +404,7 @@ class FinanceWidget(QWidget):
 
         val = int(clean_text)
         pct = (val / total_plan) * 100.0
-        pct = max(0.01, min(100.0, pct))
+        pct = max(0.0, min(100.0, pct))
 
         self.spin_pct.blockSignals(True)
         self.spin_pct.setValue(pct)
@@ -410,6 +413,23 @@ class FinanceWidget(QWidget):
     def _on_calculate(self):
         """Выполнение расчета распределения средств."""
         pct = self.spin_pct.value()
+        if pct <= 0.0:
+            clean_text = "".join(ch for ch in self.edit_sum.text() if ch.isdigit())
+            if clean_text and int(clean_text) > 0:
+                total_plan = getattr(self, "current_summary", {}).get("total_plan", 201270000)
+                if total_plan > 0:
+                    pct = (int(clean_text) / total_plan) * 100.0
+                    self.spin_pct.blockSignals(True)
+                    self.spin_pct.setValue(pct)
+                    self.spin_pct.blockSignals(False)
+            if pct <= 0.0:
+                QMessageBox.warning(
+                    self,
+                    "Параметры не заданы",
+                    "Пожалуйста, укажите сумму или процент финансирования от плана перед расчетом."
+                )
+                return
+
         quarter = self.combo_quarter.currentIndex() + 1
 
         calc = calculate_tranche_distribution(pct, DB_PATH)
@@ -417,7 +437,6 @@ class FinanceWidget(QWidget):
         self.calculated_data = calc
 
         self._render_vedomost(calc)
-
 
         self.btn_save_doc.setEnabled(True)
         self.btn_approve.setEnabled(True)
@@ -492,8 +511,12 @@ class FinanceWidget(QWidget):
         """Сброс параметров и очистка ведомости."""
         self.calculated_data = None
         self.table_ved.setRowCount(0)
-        self.spin_pct.setValue(25.0)
-        self._sync_sum_from_percent(25.0)
+        self.edit_sum.blockSignals(True)
+        self.edit_sum.clear()
+        self.edit_sum.blockSignals(False)
+        self.spin_pct.blockSignals(True)
+        self.spin_pct.setValue(0.0)
+        self.spin_pct.blockSignals(False)
         self.combo_quarter.setCurrentIndex(0)
 
         self.btn_save_doc.setEnabled(False)
@@ -588,21 +611,24 @@ class FinanceWidget(QWidget):
         total_dist = calc["total_distributed"]
         pct = calc["percent"]
 
-        # Запрос подтверждения у оператора
-        reply = QMessageBox.question(
-            self,
-            "Подтверждение утверждения финансирования",
-            f"Вы действительно хотите утвердить распоряжение о финансировании проектов НИР?\n\n"
+        # Запрос подтверждения у оператора с русскими кнопками «Да» и «Нет»
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Подтверждение утверждения финансирования")
+        msg_box.setText("Вы действительно хотите утвердить распоряжение о финансировании проектов НИР?")
+        msg_box.setInformativeText(
             f"• Квартал: {q}-й квартал\n"
             f"• Процент от плана: {pct:.2f}%\n"
             f"• Сумма транша: {total_dist:,} руб.\n"
             f"• Число проектов: {calc['total_proj_count']}\n\n"
-            f"Данные будут зафиксированы в базе данных SQLite.".replace(",", " "),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+            "После утверждения средства будут зафиксированы в базе данных SQLite.".replace(",", " ")
         )
+        msg_box.setIcon(QMessageBox.Icon.Question)
+        btn_yes = msg_box.addButton("Да", QMessageBox.ButtonRole.YesRole)
+        btn_no = msg_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
+        msg_box.setDefaultButton(btn_no)
+        msg_box.exec()
 
-        if reply != QMessageBox.StandardButton.Yes:
+        if msg_box.clickedButton() != btn_yes:
             return
 
         try:
@@ -612,17 +638,18 @@ class FinanceWidget(QWidget):
 
             self.btn_approve.setEnabled(False)
 
+            # Предложение сохранить официальный утвержденный документ с русскими кнопками «Да» и «Нет»
+            doc_box = QMessageBox(self)
+            doc_box.setWindowTitle("Сохранение документа")
+            doc_box.setText("Финансирование успешно проведено в базу данных!")
+            doc_box.setInformativeText("Желаете сохранить утвержденную ведомость выплат в файл документа?")
+            doc_box.setIcon(QMessageBox.Icon.Question)
+            btn_doc_yes = doc_box.addButton("Да", QMessageBox.ButtonRole.YesRole)
+            btn_doc_no = doc_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
+            doc_box.setDefaultButton(btn_doc_yes)
+            doc_box.exec()
 
-            # Предложение сохранить официальный утвержденный документ
-            exp_reply = QMessageBox.question(
-                self,
-                "Сохранение документа",
-                "Финансирование успешно проведено в базу данных!\n\n"
-                "Желаете сохранить утвержденную ведомость выплат в файл документа?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes
-            )
-            if exp_reply == QMessageBox.StandardButton.Yes:
+            if doc_box.clickedButton() == btn_doc_yes:
                 self._on_save_document()
 
         except Exception as e:
@@ -642,17 +669,20 @@ class FinanceWidget(QWidget):
             )
             return
 
-        reply = QMessageBox.question(
-            self,
-            "Подтверждение очистки квартала",
-            f"Вы действительно хотите обнулить выплаты за {q}-й квартал?\n\n"
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Подтверждение очистки квартала")
+        msg_box.setText(f"Вы действительно хотите обнулить выплаты за {q}-й квартал?")
+        msg_box.setInformativeText(
             f"• Текущая сумма выплат: {current_q_val:,} руб.\n\n"
-            f"Данные по {q}-му кварталу будут сброшены в 0, а общий факт финансирования уменьшен.".replace(",", " "),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+            f"Данные по {q}-му кварталу будут сброшены в 0, а общий факт финансирования уменьшен.".replace(",", " ")
         )
+        msg_box.setIcon(QMessageBox.Icon.Question)
+        btn_yes = msg_box.addButton("Да", QMessageBox.ButtonRole.YesRole)
+        btn_no = msg_box.addButton("Нет", QMessageBox.ButtonRole.NoRole)
+        msg_box.setDefaultButton(btn_no)
+        msg_box.exec()
 
-        if reply != QMessageBox.StandardButton.Yes:
+        if msg_box.clickedButton() != btn_yes:
             return
 
         try:
