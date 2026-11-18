@@ -988,29 +988,40 @@ class MainWindow(QMainWindow):
         """Диалоговое окно «Руководство пользователя»."""
         dlg = QDialog(self)
         dlg.setWindowTitle("Руководство пользователя — АРМ сопровождения конкурсов грантов")
-        dlg.resize(780, 560)
+        dlg.resize(800, 600)
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(12, 12, 12, 12)
 
         browser = QTextBrowser(dlg)
         browser.setOpenExternalLinks(False)
+        browser.setStyleSheet("""
+            QTextBrowser {
+                background-color: #1e1e24;
+                color: #e2e8f0;
+                border: 1px solid #3f3f46;
+                border-radius: 6px;
+                padding: 10px;
+            }
+        """)
         browser.setHtml("""
         <style>
-            body { font-family: 'Segoe UI', sans-serif; font-size: 13px; line-height: 1.5; color: #222; }
-            h2 { color: #1a365d; border-bottom: 2px solid #3182ce; padding-bottom: 4px; margin-top: 16px; }
-            h3 { color: #2c5282; margin-top: 12px; margin-bottom: 6px; }
+            body { font-family: 'Segoe UI', -apple-system, sans-serif; font-size: 13px; line-height: 1.5; color: #e2e8f0; background-color: #1e1e24; }
+            h2 { color: #63b3ed; border-bottom: 2px solid #3182ce; padding-bottom: 4px; margin-top: 14px; font-size: 16px; }
+            h3 { color: #90cdf4; margin-top: 14px; margin-bottom: 6px; font-size: 14px; }
             table { border-collapse: collapse; width: 100%; margin: 8px 0; }
-            th, td { border: 1px solid #cbd5e0; padding: 6px 10px; text-align: left; }
-            th { background: #edf2f7; font-weight: bold; }
-            code { background: #edf2f7; padding: 2px 6px; border-radius: 4px; font-family: Consolas, monospace; font-size: 12px; }
+            th, td { border: 1px solid #4a5568; padding: 6px 10px; text-align: left; }
+            th { background-color: #2d3748; color: #63b3ed; font-weight: bold; }
+            td { background-color: #232730; color: #e2e8f0; }
+            code { background-color: #2d3748; color: #f6ad55; padding: 2px 6px; border: 1px solid #4a5568; border-radius: 4px; font-family: Consolas, monospace; font-size: 12px; font-weight: bold; }
+            b { color: #ffffff; }
             ul { margin-top: 4px; margin-bottom: 8px; padding-left: 20px; }
-            li { margin-bottom: 4px; }
+            li { margin-bottom: 4px; color: #cbd5e0; }
         </style>
         <h2>Руководство пользователя АРМ «Сопровождение конкурсов на соискание грантов»</h2>
         <p>Автоматизированное рабочее место предназначено для учета, анализа и финансового сопровождения конкурсов грантов (Вариант 7, НИУ «МЭИ»).</p>
 
         <h3>1. Навигация по разделам системы</h3>
-        <table>
+        <table border='1' cellspacing='0' cellpadding='6'>
             <tr><th>Раздел</th><th>Горячая клавиша</th><th>Назначение</th></tr>
             <tr><td><b>Проекты НИР</b></td><td><code>Ctrl+1</code></td><td>Главный реестр тем НИР с полной информацией по исполнителям и финансированию</td></tr>
             <tr><td><b>Конкурсы грантов</b></td><td><code>Ctrl+2</code></td><td>Справочник конкурсов и сводные плановые/фактические ассигнования</td></tr>
