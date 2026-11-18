@@ -1,6 +1,8 @@
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 
+pub const EMBEDDED_SEED_DB: &[u8] = include_bytes!("../databases/grants.db");
+
 pub fn get_default_db_path() -> PathBuf {
     // 1. Check relative to current executable location
     if let Ok(exe) = std::env::current_exe() {
@@ -33,10 +35,15 @@ pub fn get_default_db_path() -> PathBuf {
         }
     }
 
-    // 3. Check %LOCALAPPDATA%/MPEI_DBMS/grants.db
+    // 3. Check %LOCALAPPDATA%/MPEI_DBMS/grants.db (or automatically seed if running standalone)
     if let Ok(appdata) = std::env::var("LOCALAPPDATA") {
-        let user_path = PathBuf::from(appdata).join("MPEI_DBMS").join("grants.db");
+        let dir = PathBuf::from(appdata).join("MPEI_DBMS");
+        let user_path = dir.join("grants.db");
         if user_path.is_file() {
+            return user_path;
+        }
+        let _ = std::fs::create_dir_all(&dir);
+        if std::fs::write(&user_path, EMBEDDED_SEED_DB).is_ok() {
             return user_path;
         }
     }
