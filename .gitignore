@@ -24,5 +24,10 @@ ehthumbs.db
 Desktop.ini
 .DS_Store
 
+# Rust build artifacts
+target/
+*.pdb
+*.exe
+
 # Temporary Office files
 ~$*
