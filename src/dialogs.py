@@ -622,7 +622,8 @@ class FilterDialog(QDialog):
         codkon = self.combo_konk.currentData()
         if codkon:
             clauses.append(f"codkon = {codkon}")
-            labels.append(f"Конкурс №{codkon}")
+            konk_label = self.combo_konk.currentText().strip()
+            labels.append(f"Конкурс {konk_label}")
 
         codvuz = self.combo_vuz.currentData()
         city = self.combo_city.currentText().strip()
